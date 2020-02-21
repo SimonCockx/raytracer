@@ -23,6 +23,13 @@ dependencies:
 - base >= 4.7 && < 5
 - massiv
 - massiv-io
+# benchmarks
+- criterion
+# tests
+- hspec
+- hspec-discover
+- QuickCheck
+- hspec-smallcheck
 
 library:
   source-dirs: src
@@ -31,23 +38,40 @@ executables:
   RayTracer-exe:
     main:                Main.hs
     source-dirs:         app
+    dependencies:
+    - RayTracer
     ghc-options:
+    - -O2
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+  main-bench:
+    main:                Bench.hs
+    source-dirs:         benchmark
     dependencies:
     - RayTracer
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
 
 tests:
-  Vector-test:
-    main:                VectorSpec.hs
-    source-dirs:         test
+  integration-tests:
+    main:                Spec.hs
+    source-dirs:         test/integration
+    dependencies:
+    - RayTracer
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+  unit-tests:
+    main:                Spec.hs
+    source-dirs:         test/unit
     dependencies:
     - RayTracer
-    - tasty
-    - tasty-hunit
-    - tasty-smallcheck
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N

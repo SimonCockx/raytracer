@@ -22,5 +22,6 @@ rayTracer = LinearDepthRayTracer 5 15
 main :: IO ()
 main = do
     let image = rayTrace rayTracer scene camera
-    writeImage "result.jpg" image
-    displayImageUsing defaultViewer True image
+    putStrLn $ show image
+    -- writeImage "result.jpg" image
+    -- displayImageUsing defaultViewer True image
