@@ -11,14 +11,14 @@ import Shape
 import Data.Massiv.Array as A
 
 scene :: Scene
-scene = Scene [ Shape $ Sphere (createPoint 0 0 (-10)) 3
-              , Shape $ Sphere (createPoint 3 1 (-11)) 2
+scene = Scene [ Shape $ Sphere (Point 0 0 (-10)) 3
+              , Shape $ Sphere (Point 3 1 (-11)) 2
               ]
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 256 256 (createPoint 0 0 0) (createVector 0 0 (-1)) (createVector 0 1 0) (pi/2)
+camera = createPerspectiveCamera 256 256 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2)
 
-camWithRes res = createPerspectiveCamera res res (createPoint 0 0 0) (createVector 0 0 (-1)) (createVector 0 1 0) (pi/2)
+camWithRes res = createPerspectiveCamera res res (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2)
 
 rayTracer :: LinearDepthRayTracer
 rayTracer = LinearDepthRayTracer 5 15

@@ -1,105 +1,157 @@
 module Transformation
     ( Transformation
-    , transform
+    , Transformable (..)
     , translate
     , rotateX
     , rotateY
     , rotateZ
     , scale
-    , (Transformation.|*|)
-    , (|*>)
     ) where
 
-import Data.Massiv.Array as A
-import qualified Data.Massiv.Array.Numeric as N
-import Data.Maybe
 import Vector
 
--- | A type that represents a transformation.
-type Transformation = Array U Ix2 Double
+data Matrix a = Matrix a a a a
+                       a a a a
+                       a a a a
+                       a a a a
 
--- | Create a transformation with given values.
-transform :: Double         -- ^ The value at (1, 1)
-          -> Double         -- ^ The value at (1, 2)
-          -> Double         -- ^ The value at (1, 3)
-          -> Double         -- ^ The value at (1, 4)
-          -> Double         -- ^ The value at (2, 1)
-          -> Double         -- ^ The value at (2, 2)
-          -> Double         -- ^ The value at (2, 3)
-          -> Double         -- ^ The value at (2, 4)
-          -> Double         -- ^ The value at (3, 1)
-          -> Double         -- ^ The value at (3, 2)
-          -> Double         -- ^ The value at (3, 3)
-          -> Double         -- ^ The value at (3, 4)
-          -> Transformation -- ^ A transformation with given values
-transform m11 m12 m13 m14
-          m21 m22 m23 m24
-          m31 m32 m33 m34 = fromLists' Par [[m11, m12, m13, m14]
-                                           ,[m21, m22, m23, m24]
-                                           ,[m31, m32, m33, m34]
-                                           ,[0,   0,   0,   1  ]]
+transpose :: Matrix a -> Matrix a
+transpose (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 m41 m42 m43 m44)
+        = (Matrix m11 m21 m31 m41 m12 m22 m32 m42 m13 m23 m33 m43 m14 m24 m34 m44)
+
+transformMatrix :: (Num a) => Matrix a -> Matrix a -> Matrix a
+transformMatrix (Matrix l11 l12 l13 l14 l21 l22 l23 l24 l31 l32 l33 l34 l41 l42 l43 l44)
+                (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 m41 m42 m43 m44)
+              = (Matrix n11 n12 n13 n14 n21 n22 n23 n24 n31 n32 n33 n34 n41 n42 n43 n44)
+    where
+        n11 = l11*m11 + l12*m21 + l13*m31 + l14*m41
+        n12 = l11*m12 + l12*m22 + l13*m32 + l14*m42
+        n13 = l11*m13 + l12*m23 + l13*m33 + l14*m43
+        n14 = l11*m14 + l12*m24 + l13*m34 + l14*m44
+        n21 = l21*m11 + l22*m21 + l23*m31 + l24*m41
+        n22 = l21*m12 + l22*m22 + l23*m32 + l24*m42
+        n23 = l21*m13 + l22*m23 + l23*m33 + l24*m43
+        n24 = l21*m14 + l22*m24 + l23*m34 + l24*m44
+        n31 = l31*m11 + l32*m21 + l33*m31 + l34*m41
+        n32 = l31*m12 + l32*m22 + l33*m32 + l34*m42
+        n33 = l31*m13 + l32*m23 + l33*m33 + l34*m43
+        n34 = l31*m14 + l32*m24 + l33*m34 + l34*m44
+        n41 = l41*m11 + l42*m21 + l43*m31 + l44*m41
+        n42 = l41*m12 + l42*m22 + l43*m32 + l44*m42
+        n43 = l41*m13 + l42*m23 + l43*m33 + l44*m43
+        n44 = l41*m14 + l42*m24 + l43*m34 + l44*m44
+
+transformVector :: (Num a) => Matrix a -> Vector a -> Vector a
+transformVector (Matrix m11 m12 m13 _ m21 m22 m23 _ m31 m32 m33 _ _ _ _ _) (Vector x y z) = Vector x' y' z'
+    where
+        x' = m11*x + m12*y + m13*z
+        y' = m21*x + m22*y + m23*z
+        z' = m31*x + m32*y + m33*z
+
+transformPoint :: (Num a) => Matrix a -> Point a -> Point a
+transformPoint (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 _ _ _ _) (Point x y z) = Point x' y' z'
+    where
+        x' = m11*x + m12*y + m13*z + m14
+        y' = m21*x + m22*y + m23*z + m24
+        z' = m31*x + m32*y + m33*z + m34
+
+-- | A type that represents a transformation.
+data Transformation a = Transformation (Matrix a) (Matrix a)
+
+class Transformable v where
+    -- | Transform a transformable with the given transformation.
+    (|*|) :: (Num a)
+          => Transformation a -- ^ The transformation
+          -> v a              -- ^ The transformable to be transformed
+          -> v a              -- ^ The transformed transformable
+instance Transformable Matrix where
+    (|*|) (Transformation mat _) = transformMatrix mat
+instance Transformable Transformation where
+    (|*|) (Transformation mat1 inv1) (Transformation mat2 inv2) = Transformation mat inv
+        where
+            mat = transformMatrix mat1 mat2
+            inv = transformMatrix inv2 inv1
+instance Transformable Vector where
+    (|*|) (Transformation mat _) = transformVector mat
+instance Transformable Point where
+    (|*|) (Transformation mat _) = transformPoint mat
+
 
 -- | Create a translation with given coordinates.
-translate :: Double         -- ^ The x translation
-          -> Double         -- ^ The y translation
-          -> Double         -- ^ The z translation
-          -> Transformation -- ^ The resulting translation
-translate x y z = transform 1 0 0 x
-                            0 1 0 y
-                            0 0 1 z
+translate :: (Num a)
+          => a                -- ^ The x translation
+          -> a                -- ^ The y translation
+          -> a                -- ^ The z translation
+          -> Transformation a -- ^ The resulting translation
+translate x y z = Transformation mat inv
+    where
+        mat = Matrix 1 0 0 x
+                     0 1 0 y
+                     0 0 1 z
+                     0 0 0 1
+        inv = Matrix 1 0 0 (-x)
+                     0 1 0 (-y)
+                     0 0 1 (-z)
+                     0 0 0 1
 
 -- | Create a rotation around the x-axis with given angle in radians.
-rotateX :: Double         -- ^ The angle in radians
-        -> Transformation -- ^ The resulting rotation
-rotateX angle = transform 1 0  0 0
-                          0 c ns 0
-                          0 s  c 0
+rotateX :: (Floating a)
+        => a                -- ^ The angle in radians
+        -> Transformation a -- ^ The resulting rotation
+rotateX angle = Transformation mat inv
     where
         c = cos angle
         s = sin angle
         ns = -s
+        mat = Matrix 1 0  0 0
+                     0 c ns 0
+                     0 s  c 0
+                     0 0  0 1
+        inv = transpose mat
 
 -- | Create a rotation around the y-axis with given angle in radians.
-rotateY :: Double         -- ^ The angle in radians
-        -> Transformation -- ^ The resulting rotation
-rotateY angle = transform  c 0 s 0
-                           0 1 0 0
-                          ns 0 c 0
+rotateY :: (Floating a)
+        => a                -- ^ The angle in radians
+        -> Transformation a -- ^ The resulting rotation
+rotateY angle = Transformation mat inv
     where
         c = cos angle
         s = sin angle
         ns = -s
+        mat = Matrix c 0 s 0
+                     0 1 0 0
+                     ns 0 c 0
+                     0  0 0 1
+        inv = transpose mat
 
 -- | Create a rotation around the z-axis with given angle in radians.
-rotateZ :: Double         -- ^ The angle in radians
-        -> Transformation -- ^ The resulting rotation
-rotateZ angle = transform 1 0  0 0
-                          0 c ns 0
-                          0 s  c 0
+rotateZ :: (Floating a)
+        => a                -- ^ The angle in radians
+        -> Transformation a -- ^ The resulting rotation
+rotateZ angle = Transformation mat inv
     where
         c = cos angle
         s = sin angle
         ns = -s
+        mat = Matrix 1 0  0 0
+                     0 c ns 0
+                     0 s  c 0
+                     0 0  0 1
+        inv = transpose mat
 
 -- | Create a scaling transformation with given factors.
-scale :: Double         -- ^ The x factor
-      -> Double         -- ^ The y factor
-      -> Double         -- ^ The z factor
-      -> Transformation -- ^ The resulting scaling transformation
-scale xf yf zf = transform xf 0  0  0
-                           0  yf 0  0
-                           0  0  zf 0
-
-
--- | Perform a matrix multiplication.
-(|*|) :: Transformation -- ^ The left-hand side of the multiplication
-      -> Transformation -- ^ The right-hand side of the multiplication
-      -> Transformation -- ^ The resulting transformation
-t1 |*| t2 = fromJust $ t1 N.|*| t2
-
-
--- | Transform a vector with the given transformation.
-(|*>) :: Transformation -- ^ The transformation
-      -> Vector         -- ^ The vector to be transformed
-      -> Vector         -- ^ The transformed vector
-t |*> v = resize' (Sz 4) $ fromJust $ t N.|*| (resize' (Sz (4 :. 1)) v)
+scale :: (Fractional a)
+      => a                -- ^ The x factor
+      -> a                -- ^ The y factor
+      -> a                -- ^ The z factor
+      -> Transformation a -- ^ The resulting scaling transformation
+scale xf yf zf = Transformation mat inv
+    where
+        mat = Matrix xf 0  0  0
+                     0  yf 0  0
+                     0  0  zf 0
+                     0  0  0  1
+        inv = Matrix (1/xf) 0    0    0
+                       0  (1/yf) 0    0
+                       0    0  (1/zf) 0
+                       0    0    0    1

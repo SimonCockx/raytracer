@@ -20,22 +20,21 @@ data PerspectiveCamera =
         yResolution :: Int,
         invXResolution :: Double,
         invYResolution :: Double,
-        origin :: Point,
-        u :: Vector,
-        v :: Vector,
-        w :: Vector,
+        origin :: Point Double,
+        u :: Vector Double,
+        v :: Vector Double,
+        w :: Vector Double,
         width :: Double,
         height :: Double }
-        deriving Show
 
 
 -- | Create a perspective camera with given resolution, origin, lookat vector, up vector and field of view.
-createPerspectiveCamera :: Int    -- ^ The x resolution
-                        -> Int    -- ^ The y resolution
-                        -> Point  -- ^ The origin of the camera
-                        -> Vector -- ^ The lookat vector
-                        -> Vector -- ^ The up vector
-                        -> Double -- ^ The field of view in radians
+createPerspectiveCamera :: Int      -- ^ The x resolution
+                        -> Int      -- ^ The y resolution
+                        -> Point Double  -- ^ The origin of the camera
+                        -> Vector Double -- ^ The lookat vector
+                        -> Vector Double -- ^ The up vector
+                        -> Double   -- ^ The field of view in radians
                         -> PerspectiveCamera
 createPerspectiveCamera xRes yRes origin lookAt up fov
     | xRes < 1 || yRes < 1  = error "The resolution of a camera cannot be less than 1"
@@ -64,4 +63,4 @@ instance Camera PerspectiveCamera where
                     y = yRes - r
                     uCoo = width * (fromIntegral x * invXRes - 0.5)
                     vCoo = height * (fromIntegral y * invYRes - 0.5)
-                    direction = uCoo .*> u <+> vCoo .*> v <-> w
+                    direction = uCoo .*> u + vCoo .*> v - w

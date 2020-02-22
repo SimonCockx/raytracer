@@ -35,7 +35,7 @@ data Sphere =
     -- | Construct a sphere with given center and radius.
     Sphere {
         -- | The center of the sphere
-        center :: Point,
+        center :: Point Double,
         -- | The radius of the sphere
         radius :: Double}
 
