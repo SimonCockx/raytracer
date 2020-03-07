@@ -23,6 +23,15 @@ dependencies:
 - base >= 4.7 && < 5
 - massiv
 - massiv-io
+- split
+- safe
+- vector-space
+- time
+- splitmix
+- random
+- mtl
+- MonadRandom
+- scheduler
 # benchmarks
 - criterion
 # tests
@@ -30,6 +39,10 @@ dependencies:
 - hspec-discover
 - QuickCheck
 - hspec-smallcheck
+
+default-extensions:
+- MultiParamTypeClasses
+- FlexibleInstances
 
 library:
   source-dirs: src

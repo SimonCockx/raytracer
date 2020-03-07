@@ -2,12 +2,47 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="65b4893b-c665-4b37-b0d0-da0a6a65dd17" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/app/Scenes.hs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/objects/cone.obj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/objects/cylinder.obj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/objects/icosahedron.obj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/objects/teapot.obj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/profile.bat" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 22.28.55.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 22.36.37.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.23.10 - shapes.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.23.13 - phong.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.24.12 - lightning.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.28.49 - shapes.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.28.52 - phong.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.29.49 - lightning.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.34.22 - shapes.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.34.25 - phong.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.35.41 - lightning.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.38.52 - shapes.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.38.56 - phong.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.40.23 - lightning.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.42.48 - shapes.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.42.52 - phong.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/results/2020.02.25 23.44.15 - lightning.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/run.bat" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Light.hs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Material.hs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/SceneObject.hs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Spectrum.hs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/stack-ghci.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RayTracer-exe.EXE.prof" beforeDir="false" afterPath="$PROJECT_DIR$/RayTracer-exe.EXE.prof" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/Main.hs" beforeDir="false" afterPath="$PROJECT_DIR$/app/Main.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/benchmark/Bench.hs" beforeDir="false" afterPath="$PROJECT_DIR$/benchmark/Bench.hs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/package.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/package.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Lib.hs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/result.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/result.jpg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Camera.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Camera.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Ray.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Ray.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/RayTracer.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer.hs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Scene.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Scene.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/stack.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/stack.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/Spec.hs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Shape.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Shape.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Transformation.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Transformation.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Vector.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Vector.hs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,7 +50,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProjectId" id="1XoWAZ7kABM9Y18agGsepxKkmVt" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
@@ -52,7 +87,22 @@
       <option name="presentableId" value="Default" />
       <updated>1581712785088</updated>
       <workItem from="1581712791653" duration="5000" />
+      <workItem from="1583305799906" duration="43000" />
     </task>
     <servers />
+  </component>
+  <component name="WindowStateProjectService">
+    <state x="685" y="190" key="FileChooserDialogImpl" timestamp="1583305837473">
+      <screen x="0" y="0" width="1920" height="1030" />
+    </state>
+    <state x="685" y="190" key="FileChooserDialogImpl/0.0.1920.1030@0.0.1920.1030" timestamp="1583305837473" />
+    <state x="579" y="293" key="com.intellij.ide.util.TipDialog" timestamp="1583305801466">
+      <screen x="0" y="0" width="1920" height="1030" />
+    </state>
+    <state x="579" y="293" key="com.intellij.ide.util.TipDialog/0.0.1920.1030@0.0.1920.1030" timestamp="1583305801466" />
+    <state x="226" y="32" key="new project wizard" timestamp="1583305839823">
+      <screen x="0" y="0" width="1920" height="1030" />
+    </state>
+    <state x="226" y="32" key="new project wizard/0.0.1920.1030@0.0.1920.1030" timestamp="1583305839823" />
   </component>
 </project>

@@ -2,33 +2,30 @@ module Main where
 
 import Criterion.Main
 
-import Scene
-import Camera
 import RayTracer
-import Vector
-import Shape
 
-import Data.Massiv.Array as A
 
-scene :: Scene
-scene = Scene [ Shape $ Sphere (Point 0 0 (-10)) 3
-              , Shape $ Sphere (Point 3 1 (-11)) 2
-              ]
+createScene :: Int -> Int -> Scene RGB
+createScene numberOfSpheres numberOfLights =
+    let spheres = replicate numberOfSpheres $ simpleObject Sphere
+        lights  = replicate numberOfLights $ Light $ PointLight (Point 0 0 0) (white :: RGB)
+    in Scene (World spheres lights) camera
+
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 256 256 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2)
+camera = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
 
-camWithRes res = createPerspectiveCamera res res (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2)
 
-rayTracer :: LinearDepthRayTracer
-rayTracer = LinearDepthRayTracer 5 15
+rayTracer :: SpectrumIndependentRayTracer
+rayTracer = SpectrumIndependentRayTracer
+
+
+gen :: Gen
+gen = createGen 29
+
 
 main :: IO ()
-main = defaultMain [
-    bgroup "ray trace" [ bench "linear depth 16" $ nf (rayTrace rayTracer scene) (camWithRes 16)
-                       , bench "linear depth 32" $ nf (rayTrace rayTracer scene) (camWithRes 32)
-                       , bench "linear depth 64" $ nf (rayTrace rayTracer scene) (camWithRes 64)
-                       , bench "linear depth 128" $ nf (rayTrace rayTracer scene) (camWithRes 128)
-                       , bench "linear depth 256" $ nf (rayTrace rayTracer scene) (camWithRes 256)
-                       ]
-    ]
+main = do
+    let spheresAndLights = [(s, l) | s <- [1], l <- [0, 1, 2]]
+    defaultMain [bgroup "ray trace" $ map (\(s, l) -> let name = "spheres=" ++ show s ++ "; lights=" ++ show l in 
+        bench name $ nf (render gen rayTracer) (createScene s l)) spheresAndLights]
