@@ -15,12 +15,11 @@ import RayTracer.Lightning
 -- | A class representing a camera that can generate a grid of rays.
 class Camera a where
     -- | Trace all rays from a camera through a world and return the resulting image.
-    rayTrace :: (RandomGen g, RayTracer r s, Spectrum s)
-             => g                 -- ^ The initial random value generator
-             -> a                 -- ^ The camera to generate rays from
-             -> r                 -- ^ The ray tracer to use
-             -> World s           -- ^ The world to trace
-             -> SpectralImage RGB -- ^ The resulting image
+    rayTrace :: (MonadRandom m, MonadSplit g m, MonadRunner g m, RandomGen g, RayTracer r s, Spectrum s)
+             => a                     -- ^ The camera to generate rays from
+             -> r                     -- ^ The ray tracer to use
+             -> World s               -- ^ The world to trace
+             -> m (SpectralImage RGB) -- ^ The resulting image
 
 data AliasingStrategy 
     = RegularGrid Int
@@ -72,11 +71,11 @@ createPerspectiveCamera xRes yRes origin lookAt up fov strategy
 
 
 -- | Generate the rays through this camera.
-generateRays :: (RandomGen g) => g -> PerspectiveCamera -> Array D Ix2 (g, Ray Double)
-generateRays gen (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width height strategy) = case strategy of
-    RegularGrid n -> createRandomArray gen generateRay Par (Sz (n*yRes :. n*xRes))
+generateRays :: (MonadRandom m) => PerspectiveCamera -> Array D Ix2 (m (Ray Double))
+generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width height strategy) = case strategy of
+    RegularGrid n -> makeArrayR D Par (Sz (n*yRes :. n*xRes)) generateRay
         where
-        generateRay (r :. c) g = (g, createRay orig direction)
+        generateRay (r :. c) = return $ createRay orig direction
             where
                 x = fromIntegral c / fromIntegral n
                 y = fromIntegral (yRes - r) / fromIntegral n
@@ -87,4 +86,6 @@ generateRays gen (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width h
 
 
 instance Camera PerspectiveCamera where
-    rayTrace gen camera tracer world = A.map (\(g, r) -> traceRay g tracer world r) $ generateRays gen camera
+    rayTrace camera tracer world = do
+        let rays = generateRays camera
+        sequenceRand Par $ A.map (traceRay tracer world) rays

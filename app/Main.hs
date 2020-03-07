@@ -50,5 +50,6 @@ display = displayImageUsing defaultViewer True
 
 main :: IO ()
 main = do
-    coloryImage <- render gen rayTracer <$> coloryScene
-    display coloryImage
+    coloryImage <- render rayTracer <$> coloryScene
+    let image = fst $ (run :: Rand Gen Image -> Gen -> (Image, Gen)) coloryImage gen
+    display image

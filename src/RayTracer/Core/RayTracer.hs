@@ -7,7 +7,7 @@ module RayTracer.Core.RayTracer
     , SpectrumIndependentRayTracer (..)
     ) where
 
-import System.Random
+import RayTracer.Random
 import Control.Monad.State
 
 import RayTracer.Geometry
@@ -21,19 +21,21 @@ import Data.Maybe
 -- | A class representing a ray tracer which can trace a ray through a world and return the resulting color.
 class (Spectrum s) => RayTracer a s where
     -- | Trace a ray through a given world and return the resulting color.
-    traceRay :: (RandomGen g) => g -> a -> World s -> Ray Double -> RGB
+    traceRay :: (MonadRandom m) => a -> World s -> m (Ray Double) -> m RGB
 
 
-traceHittingRay :: (Show s, Spectrum s, Spectrum out) => (Double -> Vector Double -> out) -> World s -> Ray Double -> RGB
-traceHittingRay onHit world ray = case intersect ray world of
-        Nothing -> black
-        Just (t, n) -> toRGB $ onHit t n
+traceHittingRay :: (Show s, Spectrum s, Spectrum out, MonadRandom m) => (Double -> Vector Double -> out) -> World s -> m (Ray Double) -> m RGB
+traceHittingRay onHit world getRay = do
+    ray <- getRay
+    case intersect ray world of
+        Nothing -> return black
+        Just (t, n) -> return $ toRGB $ onHit t n
 
 -- | A type representing a ray tracer that can detect hits.
 data HitRayTracer = HitRayTracer
 
 instance (Show s, Spectrum s) => RayTracer HitRayTracer s where
-    traceRay _ HitRayTracer = traceHittingRay $ \_ _ -> RGB 1 0 0
+    traceRay HitRayTracer = traceHittingRay $ \_ _ -> RGB 1 0 0
 
 
 -- | A type representing a ray tracer that shows the depth of a world linearly.
@@ -46,7 +48,7 @@ data LinearDepthRayTracer =
         Double -- ^ The maximum depth that will be mapped to black
 
 instance (Show s, Spectrum s) => RayTracer LinearDepthRayTracer s where
-    traceRay _ (LinearDepthRayTracer min max) = traceHittingRay $ \t _ -> Gray $ 1 - (t - min)/(max - min)
+    traceRay (LinearDepthRayTracer min max) = traceHittingRay $ \t _ -> Gray $ 1 - (t - min)/(max - min)
 
 
 -- | A type representing a ray tracer that shows the depth of a world exponentially.
@@ -57,14 +59,14 @@ newtype ExponentialDepthRayTracer =
         Double -- ^ The average depth that will be mapped to (0.5 * white).
 
 instance (Show s, Spectrum s) => RayTracer ExponentialDepthRayTracer s where
-    traceRay _ (ExponentialDepthRayTracer average) = traceHittingRay $ \t _ -> Gray $ 0.5**(t/average)
+    traceRay (ExponentialDepthRayTracer average) = traceHittingRay $ \t _ -> Gray $ 0.5**(t/average)
 
 
 -- | A type representing a ray tracer that shows the shading normals of a world relative to the ray by color.
 data NormalRayTracer = NormalRayTracer
 
 instance (Show s, Spectrum s) => RayTracer NormalRayTracer s where
-    traceRay _ NormalRayTracer = traceHittingRay $ \_ (Vector x y z) -> (RGB x y z ^+^ white) ^/ 2
+    traceRay NormalRayTracer = traceHittingRay $ \_ (Vector x y z) -> (RGB x y z ^+^ white) ^/ 2
 
 -- | The offset for a shadow ray to remove self-shadow artefacts.
 selfShadowFactor :: Double
@@ -88,9 +90,12 @@ filterRadianceSample sample world ray obj point normal = sumV radiances
 
 
 instance (Spectrum s, Show s) => RayTracer SpectrumIndependentRayTracer s where
-    traceRay gen SpectrumIndependentRayTracer world ray = toRGB $ gammaCorrect $ case findHit ray $ objects world of
-        Nothing -> black
-        Just (obj, (t, n)) -> flip evalState gen $ do
-            let p = follow ray t
-            samples <- mapM (\light -> state $ \g -> getSample g 1 light p) $ lights world
-            return $ sumV $ map (\sample -> filterRadianceSample sample world ray obj p n) samples
+    traceRay SpectrumIndependentRayTracer world getRay = do
+        ray <- getRay
+        pixel <- case findHit ray $ objects world of
+                 Nothing -> return black
+                 Just (obj, (t, n)) -> do
+                     let p = follow ray t
+                     samples <- mapM (\light -> getSample 1 light p) $ lights world
+                     return $ sumV $ map (\sample -> filterRadianceSample sample world ray obj p n) samples
+        return $ toRGB $ gammaCorrect pixel

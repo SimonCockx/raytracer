@@ -7,7 +7,7 @@ module RayTracer.Lightning.Light
     , LongRangePointLight (..)
     ) where
 
-import System.Random
+import RayTracer.Random
 import RayTracer.Geometry
 import RayTracer.Lightning.Spectrum
 
@@ -18,7 +18,7 @@ class (Shape a, Spectrum s) => LightSource a s where
                 -> Point Double -- ^ The point to get the radiance at.
                 -> s            -- ^ The radiance at the point.
     
-    getSample :: (RandomGen g) => g -> Int -> a -> Point Double -> ([(Point Double, s)], g)
+    getSample :: (MonadRandom m) => Int -> a -> Point Double -> m [(Point Double, s)]
 
 data Light s = forall a. (LightSource a s, Show a) => Light a
 
@@ -28,7 +28,7 @@ instance Shape (Light s) where
     intersect ray (Light l) = intersect ray l
 instance (Spectrum s) => LightSource (Light s) s where
     getRadiance (Light l) = getRadiance l
-    getSample gen n (Light l) = getSample gen n l
+    getSample n (Light l) = getSample n l
 
 
 data PointLight s
@@ -43,7 +43,7 @@ instance Shape (PointLight s) where
     intersect _ _ = Nothing
 instance (Spectrum s) => LightSource (PointLight s) s where
     getRadiance (PointLight center spectrum) other = spectrum ^/ (normSqr $ other <-> center)
-    getSample gen _ light@(PointLight center _) point = ([(center, getRadiance light point)], gen)
+    getSample _ light@(PointLight center _) point = return [(center, getRadiance light point)]
 
 
 data LongRangePointLight s
@@ -58,4 +58,4 @@ instance Shape (LongRangePointLight s) where
     intersect _ _ = Nothing
 instance (Spectrum s) => LightSource (LongRangePointLight s) s where
     getRadiance (LongRangePointLight center spectrum) other = spectrum ^/ (norm $ other <-> center)
-    getSample gen _ light@(LongRangePointLight center _) point = ([(center, getRadiance light point)], gen)
+    getSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light point)]

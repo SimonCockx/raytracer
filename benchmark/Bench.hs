@@ -28,4 +28,4 @@ main :: IO ()
 main = do
     let spheresAndLights = [(s, l) | s <- [1], l <- [0, 1, 2]]
     defaultMain [bgroup "ray trace" $ map (\(s, l) -> let name = "spheres=" ++ show s ++ "; lights=" ++ show l in 
-        bench name $ nf (render gen rayTracer) (createScene s l)) spheresAndLights]
+        bench name $ nf ((run :: Rand Gen Image -> Gen -> (Image, Gen)) $ render rayTracer $ createScene s l) gen) spheresAndLights]
