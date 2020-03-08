@@ -1,31 +1,28 @@
 module RayTracer.Core.Camera
     ( Camera (..)
-    , AliasingStrategy (..)
     , PerspectiveCamera
     , createPerspectiveCamera
+    , generateRays
     ) where
 
 import RayTracer.Random
-import Data.Massiv.Array as A
+import Data.Massiv.Array hiding (map, mapM)
+import qualified Data.Massiv.Array as A
 import RayTracer.Geometry
 import RayTracer.Core.RayTracer
 import RayTracer.Core.World
+import RayTracer.Core.Sampling
 import RayTracer.Lightning
+import qualified Data.HashMap.Strict as H
 
 -- | A class representing a camera that can generate a grid of rays.
 class Camera a where
     -- | Trace all rays from a camera through a world and return the resulting image.
-    rayTrace :: (MonadRandom m, MonadSplit g m, MonadRunner g m, RandomGen g, RayTracer r s, Spectrum s)
+    rayTrace :: (RayTracer r s, Spectrum s)
              => a                     -- ^ The camera to generate rays from
              -> r                     -- ^ The ray tracer to use
              -> World s               -- ^ The world to trace
-             -> m (SpectralImage RGB) -- ^ The resulting image
-
-data AliasingStrategy 
-    = RegularGrid Int
-    | Random Int
-    | Jittered Int
-    deriving (Show)
+             -> RandM (SpectralImage RGB) -- ^ The resulting image
 
 -- | A type representing a camera with perspective.
 data PerspectiveCamera = 
@@ -40,7 +37,7 @@ data PerspectiveCamera =
         w :: Vector Double,
         width :: Double,
         height :: Double,
-        aliasingStrategy :: AliasingStrategy }
+        samplingStrategy :: SamplingStrategy }
     deriving (Show)
 
 
@@ -51,7 +48,7 @@ createPerspectiveCamera :: Int           -- ^ The x resolution
                         -> Vector Double -- ^ The lookat vector
                         -> Vector Double -- ^ The up vector
                         -> Double        -- ^ The field of view in radians
-                        -> AliasingStrategy
+                        -> SamplingStrategy
                         -> PerspectiveCamera
 createPerspectiveCamera xRes yRes origin lookAt up fov strategy
     | xRes < 1 || yRes < 1  = error "The resolution of a camera cannot be less than 1"
@@ -71,21 +68,51 @@ createPerspectiveCamera xRes yRes origin lookAt up fov strategy
 
 
 -- | Generate the rays through this camera.
-generateRays :: (MonadRandom m) => PerspectiveCamera -> Array D Ix2 (m (Ray Double))
+generateRays :: (MonadRandom m) => PerspectiveCamera -> m (Array D Ix2 (m [Ray Double]))
 generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width height strategy) = case strategy of
-    RegularGrid n -> makeArrayR D Par (Sz (n*yRes :. n*xRes)) generateRay
+    RegularGrid n -> return $ makeArrayR D Par (Sz (yRes :. xRes)) generateCell
         where
-        generateRay (r :. c) = return $ createRay orig direction
+            generateCell (r :. c) = return $ map (uncurry generateRay) points
+                where
+                    cornerX = (fromIntegral c) - (fromIntegral xRes)/2
+                    cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
+                    offset = 1/(2*(fromIntegral n))
+                    points = [((cornerX + offset + ip)*invXRes, (cornerY - offset - jp)*invYRes) | i <- [0..(n-1)], j <- [0..(n-1)], let ip = (fromIntegral i) / (fromIntegral n), let jp = (fromIntegral j) / (fromIntegral n)]
+    Jittered n -> return $ makeArrayR D Par (Sz (yRes :. xRes)) generateCell
+        where
+            generateCell (r :. c) = fmap (fmap (uncurry generateRay)) $ replicateM n $ do
+                x <- getRandomR (cornerX, cornerX+1)
+                y <- getRandomR (cornerY-1, cornerY)
+                return (x*invXRes, y*invYRes)
+                where
+                    cornerX = (fromIntegral c) - (fromIntegral xRes)/2
+                    cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
+    Random n -> do
+        indexMap <- fmap (H.fromListWith (+)) $ replicateM (xRes * yRes * n) $ do
+            r <- getRandomR (0, yRes-1)
+            c <- getRandomR (0, xRes-1)
+            return ((r, c), 1)
+        return $ makeArrayR D Par (Sz (yRes :. xRes)) (\(r :. c) -> generateCell ((r, c), H.lookupDefault 0 (r, c) indexMap))
+        where
+            generateCell ((r, c), count) = fmap (fmap (uncurry generateRay)) $ replicateM count $ do
+                x <- getRandomR (cornerX, cornerX+1)
+                y <- getRandomR (cornerY-1, cornerY)
+                return (x*invXRes, y*invYRes)
+                where
+                    cornerX = (fromIntegral c) - (fromIntegral xRes)/2
+                    cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
+    where
+        generateRay x y = createRay orig direction
             where
-                x = fromIntegral c / fromIntegral n
-                y = fromIntegral (yRes - r) / fromIntegral n
-                uCoo = width * (x * invXRes - 0.5) -- TODO: moet dit ni + 0.5 zijn???
-                vCoo = height * (y * invYRes - 0.5)
+                uCoo = width * x
+                vCoo = height * y
                 direction = uCoo*^u ^+^ vCoo*^v ^-^ w
-    _ -> error "Not implemented aliasing strategy"
 
 
 instance Camera PerspectiveCamera where
     rayTrace camera tracer world = do
-        let rays = generateRays camera
-        sequenceRand Par $ A.map (traceRay tracer world) rays
+        rays <- generateRays camera
+        sequenceRand Par $ (`A.map` rays) $ \getRayCell -> do
+            rayCell <- getRayCell
+            cell <- mapM (traceRay tracer world) rayCell
+            return $ averageV cell

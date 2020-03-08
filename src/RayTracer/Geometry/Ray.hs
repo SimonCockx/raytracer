@@ -15,6 +15,7 @@ data Ray a
         origin :: Point a,
         -- | Return the normalized direction of the ray.
         direction :: Vector a}
+    deriving (Show)
 
 instance (Floating a, Eq a) => Transformable (Ray a) a where
     transform t ray = Ray p d

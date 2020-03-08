@@ -7,25 +7,23 @@ import Data.Time
 import Scenes
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
+camera = createPerspectiveCamera (600 `div` 2) (400 `div` 2) (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (Random 1)
 
-createScene :: IO (Scene RGB)
+createScene :: IO (Scene Gray)
 createScene = do
-    let elipse = scale (2 :: Double) 1 1 `transform` createSphere 1
-        elipse1 = translate (-4) 0 (-10::Double) `transform` elipse
-        elipse2 = translate 0 0 (-10::Double) `transform` rotateY (pi/2::Double) `transform` elipse
-        elipse3 = translate 4 0 (-10::Double) `transform` rotateZ (pi/2::Double) `transform` elipse
-        sphere  = translate 0 4 (-10::Double) `transform` createSphere 1
+    teaPot <- readObjFile "objects/teaPot.obj"
+    teaPotList <- readObjFileAsList "objects/teaPot.obj"
+    let teaPot1  = Transformed ((translate (-4::Double) (-2) (-9)) `transform` (scaleUni 3.5)) teaPot
+        teaPot2  = Transformed ((translate (4::Double) (-2) (-9)) `transform` (scaleUni 3.5)) teaPotList
 
-        world = World [ simpleObject elipse1
-                      , simpleObject elipse2
-                      , simpleObject elipse3
-                      , simpleObject sphere
+        world = World [ simpleObject teaPot1
+                      , simpleObject teaPot2
                       ]
-                      [ Light $ LongRangePointLight (Point (-4) 0 (-7)) (RGB 1 1 1)
-                      , Light $ LongRangePointLight (Point 4 0 (-7)) (RGB 1 1 1)
+                      [ Light $ LongRangePointLight (Point (-4) 1 (-5)) $ 3 *^ (white :: Gray)
+                      , Light $ LongRangePointLight (Point 4 1 (-5)) $ 3 *^ (white :: Gray)
                       ]
-    return $ Scene world camera
+        acceleratedWorld = insertBoundingBoxes world
+    return $ Scene acceleratedWorld camera
 
 rayTracer = SpectrumIndependentRayTracer
 
@@ -50,6 +48,7 @@ display = displayImageUsing defaultViewer True
 
 main :: IO ()
 main = do
-    coloryImage <- render rayTracer <$> coloryScene
-    let image = fst $ (run :: Rand Gen Image -> Gen -> (Image, Gen)) coloryImage gen
+    scene <- coloryScene
+    let ezScene = Scene (getWorld scene) camera
+        image = render gen rayTracer ezScene
     display image

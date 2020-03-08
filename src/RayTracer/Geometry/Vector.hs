@@ -58,6 +58,7 @@ instance (Num a, AdditiveGroup a) => InnerSpace (Vector a) where
 infixr 8 <.>
 (<.>) :: (InnerSpace v) => v -> v -> Scalar v
 (<.>) = (V.<.>)
+{-# INLINE (<.>) #-}
 
 
 instance Functor Point where

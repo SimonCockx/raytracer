@@ -1,13 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module RayTracer.Random 
-    ( MonadRunner (..)
-    , Gen
+    ( Gen
+    , RandM
     , createGen
     , createGenArray
     --, createRandomArray
     , sequenceRand
-    , getWorkerStates
+    --, getWorkerStates
     , module System.Random
     , MonadRandom (..)
     , module Control.Monad.Random.Lazy
@@ -24,13 +24,8 @@ import Data.Word (Word64)
 import Data.Massiv.Core
 import Control.Scheduler
 
-class MonadRunner g m where
-    run :: m a -> g -> (a, g)
-
-instance MonadRunner g (Rand g) where
-    run = runRand
-
 type Gen = SMGen
+type RandM = Rand Gen
 
 createGen :: Word64 -> Gen
 createGen = mkSMGen
@@ -46,12 +41,12 @@ createGenArray comp sz = do
 --     genArr <- createGenArray comp sz
 --     return $ imap f genArr
 
-sequenceRand :: (Source r ix (m e), MonadSplit g m, MonadRunner g m, RandomGen g) => Comp -> Array r ix (m e) -> m (Array D ix e)
+sequenceRand :: (Source r ix (Rand g e), RandomGen g) => Comp -> Array r ix (Rand g e) -> Rand g (Array D ix e)
 sequenceRand comp arr = do
     genArr <- createGenArray comp (size arr)
-    return $ A.zipWith (\a g -> fst $ run a g) arr genArr
+    return $ A.zipWith (\a g -> fst $ runRand a g) arr genArr
 
-getWorkerStates :: (MonadIO m, RandomGen g) => g -> Comp -> m (WorkerStates g)
-getWorkerStates gen comp = initWorkerStates comp (\worker -> return $ workerGens !! getWorkerId worker)
-    where
-        workerGens = gen : map (snd . split) workerGens
+-- getWorkerStates :: (MonadIO m, RandomGen g) => g -> Comp -> m (WorkerStates g)
+-- getWorkerStates gen comp = initWorkerStates comp (\worker -> return $ workerGens !! getWorkerId worker)
+--     where
+--         workerGens = gen : map (snd . split) workerGens

@@ -32,6 +32,7 @@ dependencies:
 - mtl
 - MonadRandom
 - scheduler
+- unordered-containers
 # benchmarks
 - criterion
 # tests

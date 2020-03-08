@@ -1,5 +1,6 @@
 module RayTracer.Core.World
     ( World (..)
+    , insertBoundingBoxes
     ) where
 
 import RayTracer.Core.SceneObject
@@ -14,3 +15,7 @@ instance (Show s) => Shape (World s) where
         where
             objectIntersection = intersect ray objects
             lightIntersection  = intersect ray lights
+    boundingBox = boundingBox . objects
+
+insertBoundingBoxes :: World s -> World s
+insertBoundingBoxes world = world {objects = map boundSceneObject $ objects world}

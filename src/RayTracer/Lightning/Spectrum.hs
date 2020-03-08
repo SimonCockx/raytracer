@@ -13,6 +13,7 @@ module RayTracer.Lightning.Spectrum
     , rgb
     , gray
     , zeroV, (^+^), (^-^), (*^), (^*), (^/), sumV
+    , averageV
     ) where
 
 import qualified Data.Massiv.Array.IO as MIO
@@ -34,6 +35,12 @@ class (VectorSpace a, Double ~ Scalar a) => Spectrum a where
     black = zeroV
     smap :: (Double -> Double) -> a -> a
     toRGB :: a -> RGB
+
+averageV :: (Spectrum s) => [s] -> s
+averageV [] = zeroV
+averageV spectra = sSpec^/count
+    where
+        (sSpec, count) = foldr (\spec (sSpec, count) -> (sSpec ^+^ spec, count+1)) (zeroV, 0::Double) spectra
 
 toImage :: (Spectrum s) => SpectralImage s -> Image
 toImage = (computeAs S) . (A.map toPixel)

@@ -21,12 +21,11 @@ import Data.Maybe
 -- | A class representing a ray tracer which can trace a ray through a world and return the resulting color.
 class (Spectrum s) => RayTracer a s where
     -- | Trace a ray through a given world and return the resulting color.
-    traceRay :: (MonadRandom m) => a -> World s -> m (Ray Double) -> m RGB
+    traceRay :: (MonadRandom m) => a -> World s -> Ray Double -> m RGB
 
 
-traceHittingRay :: (Show s, Spectrum s, Spectrum out, MonadRandom m) => (Double -> Vector Double -> out) -> World s -> m (Ray Double) -> m RGB
-traceHittingRay onHit world getRay = do
-    ray <- getRay
+traceHittingRay :: (Show s, Spectrum s, Spectrum out, MonadRandom m) => (Double -> Vector Double -> out) -> World s -> Ray Double -> m RGB
+traceHittingRay onHit world ray =
     case intersect ray world of
         Nothing -> return black
         Just (t, n) -> return $ toRGB $ onHit t n
@@ -90,8 +89,7 @@ filterRadianceSample sample world ray obj point normal = sumV radiances
 
 
 instance (Spectrum s, Show s) => RayTracer SpectrumIndependentRayTracer s where
-    traceRay SpectrumIndependentRayTracer world getRay = do
-        ray <- getRay
+    traceRay SpectrumIndependentRayTracer world ray = do
         pixel <- case findHit ray $ objects world of
                  Nothing -> return black
                  Just (obj, (t, n)) -> do

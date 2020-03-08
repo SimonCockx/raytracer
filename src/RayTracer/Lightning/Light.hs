@@ -26,6 +26,7 @@ instance Show (Light s) where
     show (Light l) = show l
 instance Shape (Light s) where
     intersect ray (Light l) = intersect ray l
+    boundingBox (Light l) = boundingBox l
 instance (Spectrum s) => LightSource (Light s) s where
     getRadiance (Light l) = getRadiance l
     getSample n (Light l) = getSample n l
@@ -41,6 +42,7 @@ data PointLight s
 
 instance Shape (PointLight s) where
     intersect _ _ = Nothing
+    boundingBox _ = AABB (pure 1) (pure (-1))
 instance (Spectrum s) => LightSource (PointLight s) s where
     getRadiance (PointLight center spectrum) other = spectrum ^/ (normSqr $ other <-> center)
     getSample _ light@(PointLight center _) point = return [(center, getRadiance light point)]
@@ -56,6 +58,7 @@ data LongRangePointLight s
 
 instance Shape (LongRangePointLight s) where
     intersect _ _ = Nothing
+    boundingBox _ = AABB (pure 1) (pure (-1))
 instance (Spectrum s) => LightSource (LongRangePointLight s) s where
     getRadiance (LongRangePointLight center spectrum) other = spectrum ^/ (norm $ other <-> center)
     getSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light point)]

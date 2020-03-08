@@ -2,6 +2,7 @@
 
 module RayTracer.Core.SceneObject
     ( SceneObject (..)
+    , boundSceneObject
     , simpleObject
     , findHit
     ) where
@@ -17,9 +18,14 @@ instance Show (SceneObject s) where
 
 instance Shape (SceneObject s) where
     intersect ray (SceneObject shape _) = intersect ray shape
+    boundingBox (SceneObject shape _) = boundingBox shape
 
 instance Material (SceneObject s) s where
     brdf (SceneObject _ mat) = brdf mat
+
+
+boundSceneObject :: SceneObject s -> SceneObject s
+boundSceneObject (SceneObject shape material) = SceneObject (boundingVolume shape) material
 
 
 -- | Create a scene object with a white diffuse material and with a specified shape.
