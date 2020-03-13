@@ -4,6 +4,8 @@ module RayTracer.Core.RayTracer
     , LinearDepthRayTracer (..)
     , ExponentialDepthRayTracer (..)
     , NormalRayTracer (..)
+    , IntersectionTestsTracer (..)
+    , BVHLayerTracer (..)
     , SpectrumIndependentRayTracer (..)
     ) where
 
@@ -14,6 +16,7 @@ import RayTracer.Geometry
 import RayTracer.Lightning
 import RayTracer.Core.World
 import RayTracer.Core.SceneObject
+import RayTracer.Core.Sampling
 import qualified Data.Massiv.Array as A
 import Data.Massiv.Array hiding (map, mapM)
 import Data.Maybe
@@ -24,9 +27,9 @@ class (Spectrum s) => RayTracer a s where
     traceRay :: (MonadRandom m) => a -> World s -> Ray Double -> m RGB
 
 
-traceHittingRay :: (Show s, Spectrum s, Spectrum out, MonadRandom m) => (Double -> Vector Double -> out) -> World s -> Ray Double -> m RGB
-traceHittingRay onHit world ray =
-    case intersect ray world of
+traceHittingRay :: (Spectrum out, MonadRandom m, Shape a) => (Double -> Vector Double -> out) -> a -> Ray Double -> m RGB
+traceHittingRay onHit shape ray =
+    case intersect ray shape of
         Nothing -> return black
         Just (t, n) -> return $ toRGB $ onHit t n
 
@@ -67,6 +70,34 @@ data NormalRayTracer = NormalRayTracer
 instance (Show s, Spectrum s) => RayTracer NormalRayTracer s where
     traceRay NormalRayTracer = traceHittingRay $ \_ (Vector x y z) -> (RGB x y z ^+^ white) ^/ 2
 
+
+data IntersectionTestsTracer = IntersectionTestsTracer Int
+
+instance (Show s, Spectrum s) => RayTracer IntersectionTestsTracer s where
+    traceRay (IntersectionTestsTracer cap) world ray
+        | p < 1     = return $ RGB 0 p 1
+        | p < 2     = return $ RGB 0 1 (2-p)
+        | p < 3     = return $ RGB (p-2) 1 0
+        | p < 4     = return $ RGB 1 (4-p) 0
+        | otherwise = return $ RGB 1 0 0
+        where
+            n = numberOfIntersectionTests ray world
+            p = 4*fromIntegral n / fromIntegral cap
+
+
+data BVHLayerTracer = BVHLayerTracer Int
+
+instance (Show s, Spectrum s) => RayTracer BVHLayerTracer s where
+    traceRay (BVHLayerTracer depth) world ray = traceHittingRay (\t n -> (n <.> negateV (direction ray)) *^ RGB 0 0.5 1) boxes ray
+        where
+            bvhs = map boundingVolume $ objects world
+            extractBoxes 0 bvh = [boundingBox bvh]
+            extractBoxes d bvh = case bvh of
+                BoundingVolume _ innerVolumes -> concatMap (extractBoxes $ d-1) innerVolumes
+                Bounded _ _ -> []
+            boxes = concatMap (extractBoxes depth) bvhs
+
+
 -- | The offset for a shadow ray to remove self-shadow artefacts.
 selfShadowFactor :: Double
 selfShadowFactor = 1e-10
@@ -77,7 +108,7 @@ isVisible p1 p2 world = case intersect (shadowRay p1 p2) world of
     Just (t, _) -> t*t >= normSqr (p2 <-> p1)
 
 -- | A type representing a ray tracer that traces direct lightning for any spectrum.
-data SpectrumIndependentRayTracer = SpectrumIndependentRayTracer
+data SpectrumIndependentRayTracer = SpectrumIndependentRayTracer SamplingStrategy
 
 filterRadianceSample :: (Spectrum s, Show s) => [(Point Double, s)] -> World s -> Ray Double -> SceneObject s -> Point Double -> Vector Double -> s
 filterRadianceSample sample world ray obj point normal = sumV radiances
@@ -89,11 +120,11 @@ filterRadianceSample sample world ray obj point normal = sumV radiances
 
 
 instance (Spectrum s, Show s) => RayTracer SpectrumIndependentRayTracer s where
-    traceRay SpectrumIndependentRayTracer world ray = do
+    traceRay (SpectrumIndependentRayTracer strat) world ray = do
         pixel <- case findHit ray $ objects world of
                  Nothing -> return black
                  Just (obj, (t, n)) -> do
                      let p = follow ray t
-                     samples <- mapM (\light -> getSample 1 light p) $ lights world
+                     samples <- mapM (\light -> getSample strat light p) $ lights world
                      return $ sumV $ map (\sample -> filterRadianceSample sample world ray obj p n) samples
         return $ toRGB $ gammaCorrect pixel

@@ -78,7 +78,7 @@ generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width heigh
                     cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
                     offset = 1/(2*(fromIntegral n))
                     points = [((cornerX + offset + ip)*invXRes, (cornerY - offset - jp)*invYRes) | i <- [0..(n-1)], j <- [0..(n-1)], let ip = (fromIntegral i) / (fromIntegral n), let jp = (fromIntegral j) / (fromIntegral n)]
-    Jittered n -> return $ makeArrayR D Par (Sz (yRes :. xRes)) generateCell
+    Stratified n -> return $ makeArrayR D Par (Sz (yRes :. xRes)) generateCell
         where
             generateCell (r :. c) = fmap (fmap (uncurry generateRay)) $ replicateM n $ do
                 x <- getRandomR (cornerX, cornerX+1)

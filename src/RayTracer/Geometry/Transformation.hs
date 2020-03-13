@@ -88,6 +88,8 @@ instance (Num a) => Transformable (Vector a) a where
     transform (Transformation mat _) = transformVector mat
 instance (Num a) => Transformable (Point a) a where
     transform (Transformation mat _) = transformPoint mat
+instance (Transformable t a) => Transformable [t] a where
+    transform trans = map (transform trans)
 
 
 -- | Invert a transformation.

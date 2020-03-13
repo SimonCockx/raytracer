@@ -5,10 +5,12 @@ module RayTracer.Geometry.Shape
     , closest
     , Intersection
     , closestIntersection
+    , BoundingVolume (..)
     , TransformedShape (..)
     , Sphere (..)
     , createSphere
-    , AABB (..)
+    , AABB (minimumPoint, maximumPoint, centroid)
+    , createAABB
     , aaCube
     , createAABox
     , Cylinder (..)
@@ -25,6 +27,7 @@ import Data.Maybe
 import Control.Monad
 import Text.Read
 import Data.List.Split
+import Data.List hiding (intersect)
 import Safe
 
 type Intersection = (Double, Vector Double)
@@ -44,34 +47,66 @@ closestIntersection = closest fst
 {-# INLINE closestIntersection #-}
 
 -- | A class representing a shape that can be intersected by a ray.
-class Shape a where
+class (Show a) => Shape a where
     -- | Compute the closest intersection of a ray with this shape, if any.
     intersect :: Ray Double -> a -> Maybe Intersection
     boundingBox :: a -> AABB
     boundingVolume :: a -> BoundingVolume
-    boundingVolume shape = BoundingVolume (boundingBox shape) [Bounded shape]
+    boundingVolume shape = Bounded (boundingBox shape) shape
+    numberOfIntersectionTests :: Ray Double -> a -> Int
+    numberOfIntersectionTests _ _ = 1
 
 
 data BoundingVolume = BoundingVolume AABB [BoundingVolume]
-                    | forall a. (Shape a) => Bounded a
+                    | forall a. (Shape a, Show a) => Bounded AABB a
 instance Show BoundingVolume where
-    show (BoundingVolume shape innerVolumes) = "BoundingVolume (" ++ show shape ++ ") (" ++ show innerVolumes ++ ")"
+    show (BoundingVolume box innerVolumes) = "BoundingVolume (" ++ show box ++ ") (" ++ show innerVolumes ++ ")"
+    show (Bounded box shape) = "Bounded (" ++ show box ++ ") (" ++ show shape ++ ")"
 instance Shape BoundingVolume where
-    intersect ray (Bounded shape) = intersect ray shape
-    intersect ray (BoundingVolume shape innerVolumes) = case intersect ray shape of
+    intersect ray (Bounded box shape) = case intersect ray box of
+        Nothing -> Nothing
+        Just _ -> intersect ray shape
+    intersect ray (BoundingVolume box innerVolumes) = case intersect ray box of
         Nothing -> Nothing
         Just _  -> intersect ray innerVolumes
-    boundingBox (Bounded shape) = boundingBox shape
+    boundingBox (Bounded box _) = box
     boundingBox (BoundingVolume box _) = box
     boundingVolume = id
-    
+    numberOfIntersectionTests ray (Bounded box shape) = numberOfIntersectionTests ray box + case intersect ray box of
+        Nothing -> 0
+        Just _ -> numberOfIntersectionTests ray shape
+    numberOfIntersectionTests ray (BoundingVolume box innerVolumes) = numberOfIntersectionTests ray box + case intersect ray box of
+        Nothing -> 0
+        Just _ -> numberOfIntersectionTests ray innerVolumes
 
 
 
 instance (Shape a) => Shape [a] where
     intersect ray = foldr (closestIntersection . intersect ray) Nothing
     boundingBox shapes = getEnclosingAABB $ map boundingBox shapes
-    boundingVolume shapes = BoundingVolume (boundingBox shapes) $ map boundingVolume shapes
+    boundingVolume shapes = splitBoundingVolumes (boundingBox bvs) bvs
+        where
+            bvs = map boundingVolume shapes
+    numberOfIntersectionTests ray = sum . map (numberOfIntersectionTests ray)
+
+splitBoundingVolumes :: AABB -> [BoundingVolume] -> BoundingVolume
+splitBoundingVolumes _ [bv] = bv
+splitBoundingVolumes box bvs
+    | areaX <= areaY && areaX <= areaZ = BoundingVolume box [splitBoundingVolumes leftBoxX leftX, splitBoundingVolumes rightBoxX rightX]
+    | areaY <= areaZ                   = BoundingVolume box [splitBoundingVolumes leftBoxY leftY, splitBoundingVolumes rightBoxY rightY]
+    | otherwise                        = BoundingVolume box [splitBoundingVolumes leftBoxZ leftZ, splitBoundingVolumes rightBoxZ rightZ]
+    where
+        middle = (length bvs + 1) `div` 2
+        getGroups projection = splitAt middle $ sortOn (\bv -> projection $ centroid $ boundingBox $ bv) bvs
+        (leftX, rightX) = getGroups (\(Point x _ _) -> x)
+        (leftBoxX, rightBoxX) = (boundingBox leftX, boundingBox rightX)
+        areaX = getArea leftBoxX + getArea rightBoxX
+        (leftY, rightY) = getGroups (\(Point _ y _) -> y)
+        (leftBoxY, rightBoxY) = (boundingBox leftY, boundingBox rightY)
+        areaY = getArea leftBoxY + getArea rightBoxY
+        (leftZ, rightZ) = getGroups (\(Point _ _ z) -> z)
+        (leftBoxZ, rightBoxZ) = (boundingBox leftZ, boundingBox rightZ)
+        areaZ = getArea leftBoxZ + getArea rightBoxZ
 
 
 data TransformedShape a = Transformed (Transformation Double) a
@@ -87,11 +122,13 @@ instance (Shape a) => Shape (TransformedShape a) where
         return (t, normalTransform m n)
     boundingBox (Transformed t s) = getAABB points
         where
-            AABB (Point minx miny minz) (Point maxx maxy maxz) = boundingBox s
+            AABB (Point minx miny minz) (Point maxx maxy maxz) _ = boundingBox s
             points = map (transform t) [ Point minx miny minz, Point minx miny maxz
                                        , Point minx maxy minz, Point minx maxy maxz
                                        , Point maxx miny minz, Point maxx miny maxz
                                        , Point maxx maxy minz, Point maxx maxy maxz ]
+    boundingVolume ts@(Transformed t s) = Bounded (boundingBox ts) (Transformed t $ boundingVolume s)
+    numberOfIntersectionTests ray (Transformed t shape) = numberOfIntersectionTests (inverseTransform t ray) shape
 
 
 -- | A type representing a unit sphere.
@@ -116,26 +153,32 @@ instance Shape Sphere where
             d = b*b - 4*a*c
             l = direction ray
             o = origin ray
-    boundingBox Sphere = AABB (pure (-1)) (pure 1)
+    boundingBox Sphere = createAABB (pure (-1)) (pure 1)
 
 createSphere :: Double -> TransformedShape Sphere
 createSphere radius = Transformed (scaleUni radius) Sphere
 
 
-data AABB = AABB {minimumPoint :: Point Double, maximumPoint :: Point Double}
+data AABB = AABB {minimumPoint :: Point Double, maximumPoint :: Point Double, centroid :: Point Double}
     deriving (Show)
+createAABB :: Point Double -> Point Double -> AABB
+createAABB minP maxP = AABB minP maxP $ minP <+^ (maxP <-> minP)^/2
+getArea :: AABB -> Double
+getArea (AABB minP maxP _) = 2*(dx*dy + dy*dz + dz*dx)
+    where
+        Vector dx dy dz = minP <-> maxP
 getAABB :: [Point Double] -> AABB
-getAABB points = AABB minPoint maxPoint
+getAABB points = createAABB minPoint maxPoint
     where
         minPoint = foldr1 (\(Point x y z) (Point minx miny minz) -> Point (min minx x) (min miny y) (min minz z)) points
         maxPoint = foldr1 (\(Point x y z) (Point maxx maxy maxz) -> Point (max maxx x) (max maxy y) (max maxz z)) points
 getEnclosingAABB :: [AABB] -> AABB
-getEnclosingAABB aabbs = AABB minPoint maxPoint
+getEnclosingAABB aabbs = createAABB minPoint maxPoint
     where
         minPoint = foldr1 (\(Point x y z) (Point minx miny minz) -> Point (min minx x) (min miny y) (min minz z)) $ map minimumPoint aabbs
         maxPoint = foldr1 (\(Point x y z) (Point maxx maxy maxz) -> Point (max maxx x) (max maxy y) (max maxz z)) $ map maximumPoint aabbs
 instance Shape AABB where
-    intersect ray (AABB (Point minx miny minz) (Point maxx maxy maxz))
+    intersect ray (AABB (Point minx miny minz) (Point maxx maxy maxz) _)
         | tmax < 0 || tmin > tmax = Nothing
         | otherwise               = Just (tmin, normal)
         where
@@ -156,9 +199,16 @@ instance Shape AABB where
             Point xo yo zo = origin ray
             Vector xd yd zd = direction ray
     boundingBox = id
+instance Transformable AABB Double where
+    transform t (AABB (Point minx miny minz) (Point maxx maxy maxz) _) = getAABB points
+        where
+            points = map (transform t) [ Point minx miny minz, Point minx miny maxz
+                                       , Point minx maxy minz, Point minx maxy maxz
+                                       , Point maxx miny minz, Point maxx miny maxz
+                                       , Point maxx maxy minz, Point maxx maxy maxz ]
 
 aaCube :: AABB
-aaCube = AABB (pure (-0.5)) (pure 0.5)
+aaCube = createAABB (pure (-0.5)) (pure 0.5)
 
 createAABox :: Double -> Double -> Double -> TransformedShape AABB
 createAABox xSize ySize zSize = Transformed (scale xSize ySize zSize) aaCube
@@ -202,7 +252,7 @@ instance Shape Cylinder where
                              y2 = yo + t2*yd in
                         if t2 >= 0 && -0.5 <= y2 && y2 <= 0.5 then Just (t2, getSurfaceNormal t2)
                         else Nothing
-    boundingBox Cylinder = AABB (Point (-1) (-0.5) (-1)) (Point 1 0.5 1)
+    boundingBox Cylinder = createAABB (Point (-1) (-0.5) (-1)) (Point 1 0.5 1)
 
 createCylinder :: Double -> Double -> TransformedShape Cylinder
 createCylinder radius length = Transformed (scale radius length radius) Cylinder
@@ -241,6 +291,8 @@ instance Shape Triangle where
         (t, _, _, _) <- intersectTriangle ray p0 p1 p2 n bV cV
         return (t, n)
     boundingBox (Triangle p0 p1 p2 _ _ _) = getAABB [p0, p1, p2]
+instance Transformable Triangle Double where
+    transform t (Triangle p0 p1 p2 _ _ _) = createTriangle (transform t p0) (transform t p1) (transform t p2)
 
 
 data Vertex = Vertex (Point Double) (Double, Double) (Vector Double)
@@ -265,6 +317,9 @@ instance Shape MeshTriangle where
         (t, alpha, beta, gamma) <- intersectTriangle ray p0 p1 p2 n bV cV
         return (t, alpha*^n0 ^+^ beta*^n1 ^+^ gamma*^n2)
     boundingBox (MeshTriangle (Vertex p0 _ _) (Vertex p1 _ _) (Vertex p2 _ _) _ _ _) = getAABB [p0, p1, p2]
+instance Transformable MeshTriangle Double where
+    transform t (MeshTriangle (Vertex p0 t0 n0) (Vertex p1 t1 n1) (Vertex p2 t2 n2) _ _ _) =
+        createMeshTriangle (Vertex (transform t p0) t0 (normalTransform t n0)) (Vertex (transform t p1) t1 (normalTransform t n1)) (Vertex (transform t p2) t2 (normalTransform t n2))
 
 
 readPoint :: String -> Maybe (Point Double)

@@ -5,6 +5,20 @@ import RayTracer
 camera1 :: PerspectiveCamera
 camera1 = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
 
+sphereLineScene :: IO (Scene RGB)
+sphereLineScene = do
+    let n = 8
+        spheres = map (\a -> translate (-0.9) (-0.9) (-a-3::Double) `transform` createSphere 1)
+            [i | i <- [0..(n-1)]]
+
+        world = World [ simpleObject spheres
+                      ]
+                      [ Light $ LongRangePointLight (Point 2 0 (-5)) (RGB 2 2 2)
+                      , Light $ LongRangePointLight (Point 0 0 0) (RGB 2 2 2)
+                      ]
+        acceleratedWorld = insertBoundingBoxes world
+    return $ Scene acceleratedWorld camera1
+
 shapeScene :: IO (Scene Gray)
 shapeScene = do
     icosahedron <- Transformed (translate 4 1 (-9::Double) `transform` (scaleUni 3)) <$> readObjFile "objects/icosahedron.obj"

@@ -17,7 +17,7 @@ camera = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector
 
 
 rayTracer :: SpectrumIndependentRayTracer
-rayTracer = SpectrumIndependentRayTracer
+rayTracer = SpectrumIndependentRayTracer (Random 1)
 
 
 gen :: Gen

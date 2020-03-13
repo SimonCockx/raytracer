@@ -5,20 +5,23 @@ module RayTracer.Lightning.Light
     , Light (..)
     , PointLight (..)
     , LongRangePointLight (..)
+    , AreaLight (..)
     ) where
 
 import RayTracer.Random
 import RayTracer.Geometry
+import RayTracer.Core.Sampling
 import RayTracer.Lightning.Spectrum
 
 
 class (Shape a, Spectrum s) => LightSource a s where
     -- | Get the radiance caused by a light source at a specific point.
     getRadiance :: a            -- ^ The light source.
+                -> Point Double -- ^ A point on the light source.
                 -> Point Double -- ^ The point to get the radiance at.
                 -> s            -- ^ The radiance at the point.
     
-    getSample :: (MonadRandom m) => Int -> a -> Point Double -> m [(Point Double, s)]
+    getSample :: (MonadRandom m) => SamplingStrategy -> a -> Point Double -> m [(Point Double, s)]
 
 data Light s = forall a. (LightSource a s, Show a) => Light a
 
@@ -29,7 +32,14 @@ instance Shape (Light s) where
     boundingBox (Light l) = boundingBox l
 instance (Spectrum s) => LightSource (Light s) s where
     getRadiance (Light l) = getRadiance l
-    getSample n (Light l) = getSample n l
+    getSample strat (Light l) = getSample strat l
+
+
+instance (LightSource l s) => LightSource (TransformedShape l) s where
+    getRadiance (Transformed t light) pl pt = getRadiance light (t `inverseTransform` pl) (t `inverseTransform` pt)
+    getSample strat (Transformed t light) p = fmap (map (\(point, spec) -> (t `transform` point, spec))) sample
+        where
+            sample = getSample strat light (t `inverseTransform` p)
 
 
 data PointLight s
@@ -40,12 +50,12 @@ data PointLight s
         s              -- ^ The radiance of the light at distance 1.
     deriving (Show)
 
-instance Shape (PointLight s) where
+instance (Show s) => Shape (PointLight s) where
     intersect _ _ = Nothing
-    boundingBox _ = AABB (pure 1) (pure (-1))
-instance (Spectrum s) => LightSource (PointLight s) s where
-    getRadiance (PointLight center spectrum) other = spectrum ^/ (normSqr $ other <-> center)
-    getSample _ light@(PointLight center _) point = return [(center, getRadiance light point)]
+    boundingBox _ = createAABB (pure 1) (pure (-1))
+instance (Show s, Spectrum s) => LightSource (PointLight s) s where
+    getRadiance (PointLight center spectrum) _ other = spectrum ^/ (normSqr $ other <-> center)
+    getSample _ light@(PointLight center _) point = return [(center, getRadiance light center point)]
 
 
 data LongRangePointLight s
@@ -56,9 +66,37 @@ data LongRangePointLight s
         s              -- ^ The radiance of the light at distance 1.
     deriving (Show)
 
-instance Shape (LongRangePointLight s) where
+instance (Show s) => Shape (LongRangePointLight s) where
     intersect _ _ = Nothing
-    boundingBox _ = AABB (pure 1) (pure (-1))
-instance (Spectrum s) => LightSource (LongRangePointLight s) s where
-    getRadiance (LongRangePointLight center spectrum) other = spectrum ^/ (norm $ other <-> center)
-    getSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light point)]
+    boundingBox _ = createAABB (pure 1) (pure (-1))
+instance (Show s, Spectrum s) => LightSource (LongRangePointLight s) s where
+    getRadiance (LongRangePointLight center spectrum) _ other = spectrum ^/ (norm $ other <-> center)
+    getSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light center point)]
+
+
+data AreaLight s = AreaLight Double Double s
+    deriving (Show)
+
+instance (Show s) => Shape (AreaLight s) where
+    intersect ray (AreaLight width height _)
+        | -width/2 <= x && x <= width/2 && -height/2 <= z && z <= height/2 = Just (t, normal)
+        | otherwise = Nothing
+        where
+            t = -yo/yd
+            normal = Vector 0 (negate $ signum yd) 0
+            Point x _ z = follow ray t
+            Point _ yo _ = origin ray
+            Vector _ yd _ = direction ray
+    boundingBox (AreaLight width height _) = createAABB (Point (-width/2) 0 (-height/2)) (Point (width/2) 0 (height/2))
+instance (Show s, Spectrum s) => LightSource (AreaLight s) s where
+    getRadiance (AreaLight width height spec) pl pt = spec ^* (width * height * (abs y) / distSqr)
+        where
+            dp = pt <-> pl
+            distSqr = normSqr dp
+            d = dp ^/ (sqrt distSqr)
+            Vector _ y _ = d
+    getSample strat light@(AreaLight width height _) point = do
+        rOffsets <- sample strat
+        let points = map (\(rx, rz) -> Point (rx*width) 0 (rz*height)) rOffsets
+            count = fromIntegral $ length points
+        return $ zip points $ map (\pl -> getRadiance light pl point ^/ count) points 

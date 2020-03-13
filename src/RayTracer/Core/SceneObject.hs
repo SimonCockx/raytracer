@@ -19,6 +19,8 @@ instance Show (SceneObject s) where
 instance Shape (SceneObject s) where
     intersect ray (SceneObject shape _) = intersect ray shape
     boundingBox (SceneObject shape _) = boundingBox shape
+    boundingVolume (SceneObject shape _) = boundingVolume shape
+    numberOfIntersectionTests ray (SceneObject shape _) = numberOfIntersectionTests ray shape
 
 instance Material (SceneObject s) s where
     brdf (SceneObject _ mat) = brdf mat
