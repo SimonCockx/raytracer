@@ -1,6 +1,6 @@
 module RayTracer.Core.Sampling
     ( SamplingStrategy (..)
-    , sample
+    , getSample
     ) where
 
 import RayTracer.Random
@@ -12,8 +12,8 @@ data SamplingStrategy
     | Stratified Int
     deriving (Show)
 
-sample :: (MonadRandom m) => SamplingStrategy -> m [(Double, Double)]
-sample strategy = case strategy of
+getSample :: (MonadRandom m) => SamplingStrategy -> m [(Double, Double)]
+getSample strategy = case strategy of
     RegularGrid n -> return $ points
         where
             offset = 1/(2*(fromIntegral n))-0.5
@@ -22,3 +22,4 @@ sample strategy = case strategy of
                     x <- getRandomR (-0.5, 0.5)
                     y <- getRandomR (-0.5, 0.5)
                     return (x, y)
+    _ -> error "Not implemented strategy!" -- TODO: implement Stratified

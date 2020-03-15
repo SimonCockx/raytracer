@@ -1,6 +1,7 @@
 module Scenes where
 
 import RayTracer
+import Prelude hiding (floor)
 
 camera1 :: PerspectiveCamera
 camera1 = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
@@ -11,7 +12,7 @@ sphereLineScene = do
         spheres = map (\a -> translate (-0.9) (-0.9) (-a-3::Double) `transform` createSphere 1)
             [i | i <- [0..(n-1)]]
 
-        world = World [ simpleObject spheres
+        world = createWorld [ simpleObject spheres
                       ]
                       [ Light $ LongRangePointLight (Point 2 0 (-5)) (RGB 2 2 2)
                       , Light $ LongRangePointLight (Point 0 0 0) (RGB 2 2 2)
@@ -28,7 +29,7 @@ shapeScene = do
         cylinder = translate 7 (-5) (-10::Double) `transform` (rotateZ (pi/18 :: Double)) `transform` createCylinder 1 3
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
 
-        world    = World [ simpleObject icosahedron
+        world    = createWorld [ simpleObject icosahedron
                          , simpleObject elipse
                          , simpleObject sphere
                          , simpleObject box
@@ -47,7 +48,7 @@ phongScene = do
     let teaPot1  = Transformed ((translate (-4::Double) (-2) (-9)) `transform` (scaleUni 3.5)) teaPot
         teaPot2  = Transformed ((translate (4::Double) (-2) (-9)) `transform` (scaleUni 3.5)) teaPotList
 
-        world = World [ simpleObject teaPot1
+        world = createWorld [ simpleObject teaPot1
                       , simpleObject teaPot2
                       ]
                       [ Light $ LongRangePointLight (Point (-4) 1 (-5)) $ 3 *^ (white :: Gray)
@@ -64,7 +65,7 @@ lightningScene = do
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
         floor    = translate 0 (-3) (-9::Double) `transform` createAABox 30 2 30
 
-        world = World [ SceneObject icosahedron $ Diffuse $ RGB 0.4 0 0.1
+        world = createWorld [ SceneObject icosahedron $ Diffuse $ RGB 0.4 0 0.1
                       , SceneObject sphere $ Diffuse $ RGB 1 1 0
                       , simpleObject box
                       , simpleObject cylinder
@@ -89,7 +90,7 @@ coloryScene = do
         cylinder = translate 7 (-5) (-10::Double) `transform` createCylinder 1 3
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
 
-        world = World [ simpleObject icosahedron
+        world = createWorld [ simpleObject icosahedron
                       , simpleObject elipse
                       , simpleObject sphere
                       , simpleObject box
@@ -110,7 +111,7 @@ lonelyTeapot = do
     teaPot   <- Transformed ((translate (-2::Double) (-2) (-9)) `transform` (scaleUni 2)) <$> readObjFile "objects/teaPot.obj"
     let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
 
-        world = World [ SceneObject teaPot (Diffuse $ RGB 0.8 0.5 0.9)
+        world = createWorld [ SceneObject teaPot (Diffuse $ RGB 0.8 0.5 0.9)
                       , simpleObject floor
                       ]
                       [ Light $ LongRangePointLight (Point (-2) 1 (-6)) (RGB 3 1 1)

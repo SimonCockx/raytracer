@@ -18,7 +18,7 @@ import qualified Data.HashMap.Strict as H
 -- | A class representing a camera that can generate a grid of rays.
 class Camera a where
     -- | Trace all rays from a camera through a world and return the resulting image.
-    rayTrace :: (RayTracer r s, Spectrum s)
+    rayTrace :: (RayTracer r s)
              => a                     -- ^ The camera to generate rays from
              -> r                     -- ^ The ray tracer to use
              -> World s               -- ^ The world to trace
@@ -32,11 +32,11 @@ data PerspectiveCamera =
         invXResolution :: Double,
         invYResolution :: Double,
         origin :: Point Double,
-        u :: Vector Double,
-        v :: Vector Double,
-        w :: Vector Double,
-        width :: Double,
-        height :: Double,
+        uVec :: Vector Double,
+        vVec :: Vector Double,
+        wVec :: Vector Double,
+        getWidth :: Double,
+        getHeight :: Double,
         samplingStrategy :: SamplingStrategy }
     deriving (Show)
 
@@ -50,11 +50,11 @@ createPerspectiveCamera :: Int           -- ^ The x resolution
                         -> Double        -- ^ The field of view in radians
                         -> SamplingStrategy
                         -> PerspectiveCamera
-createPerspectiveCamera xRes yRes origin lookAt up fov strategy
+createPerspectiveCamera xRes yRes orig lookAt up fov strategy
     | xRes < 1 || yRes < 1  = error "The resolution of a camera cannot be less than 1"
     | fov <= 0 || fov >= pi = error "The field of view must lie between 0 and pi"
     | l == 0                = error "The lookat vector and up vector are colinear"
-    | otherwise = PerspectiveCamera xRes yRes invX invY origin u v w width height strategy
+    | otherwise = PerspectiveCamera xRes yRes invX invY orig u v w width height strategy
     where
         invX = (1.0 / fromIntegral xRes)
         invY = (1.0 / fromIntegral yRes)
@@ -102,11 +102,11 @@ generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width heigh
                     cornerX = (fromIntegral c) - (fromIntegral xRes)/2
                     cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
     where
-        generateRay x y = createRay orig direction
+        generateRay x y = createRay orig direc
             where
                 uCoo = width * x
                 vCoo = height * y
-                direction = uCoo*^u ^+^ vCoo*^v ^-^ w
+                direc = uCoo*^u ^+^ vCoo*^v ^-^ w
 
 
 instance Camera PerspectiveCamera where

@@ -1,5 +1,6 @@
 module RayTracer.Core.World
-    ( World (..)
+    ( World (objects, lights)
+    , createWorld
     , insertBoundingBoxes
     ) where
 
@@ -10,12 +11,11 @@ import RayTracer.Geometry
 data World s = World {objects :: [SceneObject s], lights :: [Light s]}
     deriving (Show)
 
-instance (Show s) => Shape (World s) where
-    -- intersect ray (World objects lights) = closestIntersection objectIntersection lightIntersection
-    --     where
-    --         objectIntersection = intersect ray objects
-    --         lightIntersection  = intersect ray lights
-    intersect ray (World objects lights) = intersect ray objects
+createWorld :: (Spectrum s) => [SceneObject s] -> [Light s] -> World s
+createWorld os ls = World (map SceneLight ls ++ os) ls
+
+instance Shape (World s) where
+    intersect ray (World os _) = intersect ray os
     boundingBox = boundingBox . objects
     boundingVolume = boundingVolume . objects
     numberOfIntersectionTests ray = numberOfIntersectionTests ray . objects

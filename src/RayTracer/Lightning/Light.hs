@@ -21,7 +21,7 @@ class (Shape a, Spectrum s) => LightSource a s where
                 -> Point Double -- ^ The point to get the radiance at.
                 -> s            -- ^ The radiance at the point.
     
-    getSample :: (MonadRandom m) => SamplingStrategy -> a -> Point Double -> m [(Point Double, s)]
+    generateSample :: (MonadRandom m) => SamplingStrategy -> a -> Point Double -> m [(Point Double, s)]
 
 data Light s = forall a. (LightSource a s, Show a) => Light a
 
@@ -32,14 +32,14 @@ instance Shape (Light s) where
     boundingBox (Light l) = boundingBox l
 instance (Spectrum s) => LightSource (Light s) s where
     getRadiance (Light l) = getRadiance l
-    getSample strat (Light l) = getSample strat l
+    generateSample strat (Light l) = generateSample strat l
 
 
 instance (LightSource l s) => LightSource (TransformedShape l) s where
     getRadiance (Transformed t light) pl pt = getRadiance light (t `inverseTransform` pl) (t `inverseTransform` pt)
-    getSample strat (Transformed t light) p = fmap (map (\(point, spec) -> (t `transform` point, spec))) sample
+    generateSample strat (Transformed t light) p = fmap (map (\(point, spec) -> (t `transform` point, spec))) sample
         where
-            sample = getSample strat light (t `inverseTransform` p)
+            sample = generateSample strat light (t `inverseTransform` p)
 
 
 data PointLight s
@@ -55,7 +55,7 @@ instance (Show s) => Shape (PointLight s) where
     boundingBox _ = createAABB (pure 1) (pure (-1))
 instance (Show s, Spectrum s) => LightSource (PointLight s) s where
     getRadiance (PointLight center spectrum) _ other = spectrum ^/ (normSqr $ other <-> center)
-    getSample _ light@(PointLight center _) point = return [(center, getRadiance light center point)]
+    generateSample _ light@(PointLight center _) point = return [(center, getRadiance light center point)]
 
 
 data LongRangePointLight s
@@ -71,7 +71,7 @@ instance (Show s) => Shape (LongRangePointLight s) where
     boundingBox _ = createAABB (pure 1) (pure (-1))
 instance (Show s, Spectrum s) => LightSource (LongRangePointLight s) s where
     getRadiance (LongRangePointLight center spectrum) _ other = spectrum ^/ (norm $ other <-> center)
-    getSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light center point)]
+    generateSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light center point)]
 
 
 data AreaLight s = AreaLight Double Double s
@@ -88,15 +88,22 @@ instance (Show s) => Shape (AreaLight s) where
             Point _ yo _ = origin ray
             Vector _ yd _ = direction ray
     boundingBox (AreaLight width height _) = createAABB (Point (-width/2) 0 (-height/2)) (Point (width/2) 0 (height/2))
-instance (Show s, Spectrum s) => LightSource (AreaLight s) s where
-    getRadiance (AreaLight width height spec) pl pt = spec ^* (width * height * (abs y) / distSqr)
+getRadianceDividedByDistSqr :: (Spectrum s) => AreaLight s -> Point Double -> Point Double -> s
+getRadianceDividedByDistSqr (AreaLight width height spec) pl pt = spec ^* (width * height * (abs y) / distSqr)
         where
             dp = pt <-> pl
             distSqr = normSqr dp
             d = dp ^/ (sqrt distSqr)
             Vector _ y _ = d
-    getSample strat light@(AreaLight width height _) point = do
-        rOffsets <- sample strat
+instance (Show s, Spectrum s) => LightSource (AreaLight s) s where
+    getRadiance (AreaLight width height spec) pl pt = spec ^* (width * height * (abs y))
+        where
+            dp = pt <-> pl
+            distSqr = normSqr dp
+            d = dp ^/ (sqrt distSqr)
+            Vector _ y _ = d
+    generateSample strat light@(AreaLight width height _) point = do
+        rOffsets <- getSample strat
         let points = map (\(rx, rz) -> Point (rx*width) 0 (rz*height)) rOffsets
             count = fromIntegral $ length points
-        return $ zip points $ map (\pl -> getRadiance light pl point ^/ count) points 
+        return $ zip points $ map (\pl -> getRadianceDividedByDistSqr light pl point ^/ count) points 

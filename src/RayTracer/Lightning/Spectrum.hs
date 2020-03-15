@@ -20,14 +20,13 @@ import qualified Data.Massiv.Array.IO as MIO
 import Data.Massiv.Array as A
 import qualified Graphics.ColorSpace as C
 import Data.VectorSpace
-import Data.AdditiveGroup
 
 type Pixel = C.Pixel C.RGB C.Word8
 type Image = MIO.Image S C.RGB C.Word8
 type SpectralImage spec = A.Array D Ix2 spec
 
 
-class (VectorSpace a, Double ~ Scalar a) => Spectrum a where
+class (VectorSpace a, Double ~ Scalar a, Eq a) => Spectrum a where
     toPixel :: a -> Pixel
     (^*^) :: a -> a -> a
     white :: a
@@ -38,9 +37,9 @@ class (VectorSpace a, Double ~ Scalar a) => Spectrum a where
 
 averageV :: (Spectrum s) => [s] -> s
 averageV [] = zeroV
-averageV spectra = sSpec^/count
+averageV spectra = sumSpec^/count
     where
-        (sSpec, count) = foldr (\spec (sSpec, count) -> (sSpec ^+^ spec, count+1)) (zeroV, 0::Double) spectra
+        (sumSpec, count) = foldr (\spec (sSpec, c) -> (sSpec ^+^ spec, c+1)) (zeroV, 0::Double) spectra
 
 toImage :: (Spectrum s) => SpectralImage s -> Image
 toImage = (computeAs S) . (A.map toPixel)
@@ -52,7 +51,7 @@ gray :: Double -> Pixel
 gray x = rgb x x x
 
 toWord :: Double -> C.Word8
-toWord = fromIntegral . round . (255*) . (min 1) . (max 0)
+toWord = (fromIntegral :: Int -> C.Word8) . round . (255*) . min 1 . max 0
 
 
 gamma :: Double
@@ -66,7 +65,7 @@ gammaCorrectImage = A.map gammaCorrect
 
 
 newtype Gray = Gray Double
-    deriving (Show)
+    deriving (Show, Eq)
 deriving instance Num Gray
 deriving instance AdditiveGroup Gray
 instance VectorSpace Gray where
@@ -81,7 +80,7 @@ instance Spectrum Gray where
 
 
 data RGB = RGB Double Double Double
-    deriving (Show)
+    deriving (Show, Eq)
 instance AdditiveGroup RGB where
     zeroV = RGB 0.0 0.0 0.0
     (RGB r1 g1 b1) ^+^ (RGB r2 g2 b2) = RGB (r1 + r2) (g1 + g2) (b1 + b2)

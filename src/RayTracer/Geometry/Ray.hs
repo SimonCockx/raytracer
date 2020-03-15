@@ -29,7 +29,7 @@ createRay :: (Floating a, Eq a, AdditiveGroup a)
           => Point a  -- ^ The origin
           -> Vector a -- ^ The direction
           -> Ray a    -- ^ The resulting ray
-createRay origin direction = Ray origin (normalize direction)
+createRay orig direc = Ray orig (normalize direc)
 
 -- | Return the point that the ray would reach when following the direction of the ray for a specified amount.
 follow :: (Num a) 

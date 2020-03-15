@@ -8,31 +8,31 @@ import Scenes
 
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
+camera = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 4)
 
 createScene :: IO (Scene RGB)
 createScene = do
-    obj      <- readObjFile "objects/teapot.obj"
-    let teapot = translate (0::Double) (-1) (-4) `transform` scaleUni (2::Double) `transform` obj
-    let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
+    teaPotObj <- readObjFile "objects/teaPot.obj"
+    let floor = translate (-2) (-3) (-6::Double) `transform` createAABox 30 2 30
+        teaPot = translate (-2::Double) (-2) (-6) `transform` scaleUni (2 :: Double) `transform` rotateY (pi/15 :: Double) `transform` teaPotObj
 
-        world = World [ SceneObject teapot (Diffuse $ RGB 0.8 0.5 0.9)
-                      ]
-                      [ Light $ LongRangePointLight (Point (-2) 1 (-6)) (RGB 3 1 1)
-                      , Light $ LongRangePointLight (Point 0 3 (-9)) (RGB 1 3 1)
-                      ]
+        world = createWorld [ SceneObject teaPot (Diffuse $ RGB 0.8 0.5 0.9)
+                            , simpleObject floor
+                            ]
+                            [ Light $ Transformed (translate 2 1 (-6 :: Double) `transform` rotateZ (-pi/3)) $ AreaLight 3 3 $ RGB 1 1 1
+                            ]
     return $ Scene (insertBoundingBoxes world) camera
 
-rayTracer = IntersectionTestsTracer 100
+rayTracer = SpectrumIndependentRayTracer $ Random 10
 
-renderFast :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
+renderFast :: (Spectrum s) => IO (Scene s) -> IO Image
 renderFast getScene = do
     scene <- getScene
     let fastScene = Scene (insertBoundingBoxes $ getWorld scene) 
-                          (createPerspectiveCamera 200 150 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 2))
+                          (createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 2))
     return $ render gen (SpectrumIndependentRayTracer $ Random 1) fastScene
 
-justRender :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
+justRender :: (Spectrum s) => IO (Scene s) -> IO Image
 justRender getScene = render gen rayTracer <$> getScene
 
 gen :: Gen
@@ -57,8 +57,9 @@ main :: IO ()
 main = do
     let scene = createScene
     --scene >>= print
+    --(show <$> scene) >>= writeFile "test.txt"
     image <- justRender scene
-    saveAs "BVH_test" image
+    saveAs "explicit_area_light_test" image
     display image
 
     --images <- mapM (\n -> render gen (BVHLayerTracer n) <$> scene) [0..10]

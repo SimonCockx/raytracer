@@ -17,7 +17,6 @@ module RayTracer.Geometry.Vector
 
 import Data.VectorSpace hiding ((<.>))
 import qualified Data.VectorSpace as V ((<.>))
-import Data.AdditiveGroup
 
 -- | A type that represents a vector.
 data Vector a = Vector a a a

@@ -17,7 +17,7 @@ data Scene s = forall cam. (Camera cam, Show cam) => Scene {getWorld :: (World s
 instance (Show s) => Show (Scene s) where
     show (Scene world cam) = "Scene (" ++ show world ++ ") (" ++ show cam ++ ")"
 
-render :: (Spectrum s, RayTracer r s) => Gen -> r -> Scene s -> Image
+render :: (RayTracer r s) => Gen -> r -> Scene s -> Image
 render gen tracer (Scene world camera) = fst $ (`runRand` gen) $ do
     spectralImage <- rayTrace camera tracer world
     return $ toImage spectralImage

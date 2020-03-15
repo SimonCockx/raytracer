@@ -103,6 +103,10 @@ normalTransform :: (Floating a, Eq a, AdditiveGroup a)
                 -> Vector a         -- ^ The normal to be transformed
                 -> Vector a         -- ^ The transformed normal
 normalTransform (Transformation _ inv) = normalize . transformVector (transpose inv)
+inverseNormalTransform :: (Floating a, Eq a, AdditiveGroup a)
+                       => Transformation a -- ^ The transformation
+                       -> Vector a         -- ^ The normal to be transformed inversely
+                       -> Vector a         -- ^ The inversely transformed normal
 inverseNormalTransform t = normalTransform $ inverse t
 
 

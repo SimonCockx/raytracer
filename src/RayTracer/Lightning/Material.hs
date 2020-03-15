@@ -2,7 +2,8 @@
 
 module RayTracer.Lightning.Material
     ( Material (..)
-    , SimpleMaterial (..)
+    , WhiteMaterial (..)
+    , BlackMaterial (..)
     , Diffuse (..)
     ) where
 
@@ -19,11 +20,18 @@ class Material m s where
          -> s             -- ^ The reflectance in the specified direction
 
 -- | A type that represents a diffuse, white material.
-data SimpleMaterial = SimpleMaterial
+data WhiteMaterial = WhiteMaterial
     deriving (Show)
 
-instance (Spectrum s) => Material SimpleMaterial s where
-    brdf SimpleMaterial _ _ _ = white
+instance (Spectrum s) => Material WhiteMaterial s where
+    brdf WhiteMaterial _ _ _ = white
+
+-- | A type that represents a diffuse, black material.
+data BlackMaterial = BlackMaterial
+    deriving (Show)
+
+instance (Spectrum s) => Material BlackMaterial s where
+    brdf BlackMaterial _ _ _ = black
 
 -- | A type that represents a diffuse material of a specific spectrum.
 data Diffuse s

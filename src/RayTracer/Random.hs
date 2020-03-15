@@ -21,9 +21,6 @@ import Data.Massiv.Array hiding (map)
 import qualified Data.Massiv.Array as A
 import Data.Word (Word64)
 
-import Data.Massiv.Core
-import Control.Scheduler
-
 type Gen = SMGen
 type RandM = Rand Gen
 
