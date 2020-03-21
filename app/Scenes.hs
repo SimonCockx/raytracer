@@ -118,3 +118,17 @@ lonelyTeapot = do
                       , Light $ LongRangePointLight (Point 0 3 (-9)) (RGB 1 3 1)
                       ]
     return $ Scene world camera1
+
+siyunScene :: IO (Scene RGB)
+siyunScene = do
+    planeObj   <- readObjFile "objects/plane-siyun.obj"
+    let floor = translate (-2) (-5) (-9::Double) `transform` createAABox 20 2 20
+        plane = translate 0 (-2) (-13::Double) `transform` rotateY (pi/6::Double) `transform` rotateX (pi/6::Double) `transform` scaleUni (0.03::Double) `transform` planeObj
+
+        world = createWorld [ SceneObject plane (Diffuse $ RGB 0 0.8 0)
+                      , simpleObject floor
+                      ]
+                      [ Light $ LongRangePointLight (Point (-2) 1 (-6)) (RGB 1 1 1)
+                      , Light $ LongRangePointLight (Point 0 3 (-9)) (RGB 1 1 1)
+                      ]
+    return $ Scene (insertBoundingBoxes world) camera1

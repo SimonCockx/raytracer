@@ -88,7 +88,7 @@ generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width heigh
                     cornerX = (fromIntegral c) - (fromIntegral xRes)/2
                     cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
     Random n -> do
-        indexMap <- fmap (H.fromListWith (+)) $ replicateM (xRes * yRes * n) $ do
+        indexMap <- fmap (H.fromListWith (+)) $ replicateM (ceiling $ fromIntegral (xRes * yRes) * n) $ do
             r <- getRandomR (0, yRes-1)
             c <- getRandomR (0, xRes-1)
             return ((r, c), 1)

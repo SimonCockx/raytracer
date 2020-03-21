@@ -37,21 +37,28 @@ instance Applicative Vector where
 instance Foldable Vector where
     foldr f acc (Vector x y z) = x `f` (y `f` (z `f` acc))
     {-# INLINE foldr #-}
+instance Traversable Vector where
+    traverse f (Vector x y z) = fromList <$> traverse f [x, y, z]
+        where
+            fromList [a, b, c] = Vector a b c
+            fromList _ = error "Not implemented..."
+            {-# INLINE fromList #-}
+    {-# INLINE traverse #-}
 instance (Num a) => AdditiveGroup (Vector a) where
     zeroV = Vector 0 0 0
     {-# INLINE zeroV #-}
-    v1 ^+^ v2 = (+) `fmap` v1 <*> v2
+    v1 ^+^ v2 = (+) <$> v1 <*> v2
     {-# INLINE (^+^) #-}
     negateV = fmap negate
     {-# INLINE negateV #-}
-    v1 ^-^ v2 = (-) `fmap` v1 <*> v2
+    v1 ^-^ v2 = (-) <$> v1 <*> v2
     {-# INLINE (^-^) #-}
 instance (Num a) => VectorSpace (Vector a) where
     type Scalar (Vector a) = a
     a *^ v = fmap (a*) v
     {-# INLINE (*^) #-}
 instance (Num a, AdditiveGroup a) => InnerSpace (Vector a) where
-    v1 <.> v2 = sum $ (*) `fmap` v1 <*> v2
+    v1 <.> v2 = sum $ (*) <$> v1 <*> v2
     {-# INLINE (<.>) #-}
 
 infixr 8 <.>
@@ -68,6 +75,16 @@ instance Applicative Point where
     {-# INLINE pure #-}
     (Point fx fy fz) <*> (Point x y z) = Point (fx x) (fy y) (fz z)
     {-# INLINE (<*>) #-}
+instance Foldable Point where
+    foldr f acc (Point x y z) = x `f` (y `f` (z `f` acc))
+    {-# INLINE foldr #-}
+instance Traversable Point where
+    traverse f (Point x y z) = fromList <$> traverse f [x, y, z]
+        where
+            fromList [a, b, c] = Point a b c
+            fromList _ = error "Not implemented..."
+            {-# INLINE fromList #-}
+    {-# INLINE traverse #-}
 
 toVector :: Point a -> Vector a
 toVector (Point x y z) = Vector x y z

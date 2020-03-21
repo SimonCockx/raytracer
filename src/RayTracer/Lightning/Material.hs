@@ -1,7 +1,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
 module RayTracer.Lightning.Material
-    ( Material (..)
+    ( BRDF
+    , Material (..)
     , WhiteMaterial (..)
     , BlackMaterial (..)
     , Diffuse (..)
@@ -10,11 +11,13 @@ module RayTracer.Lightning.Material
 import RayTracer.Geometry
 import RayTracer.Lightning.Spectrum
 
+type BRDF s = Vector Double -> Vector Double -> Vector Double -> s
+
 -- | A class representing a material concerning a bidirectional reflectance distribution function (brdf) of a specific spectrum.
 class Material m s where
     -- | The brdf of this material.
     brdf :: m
-         -> Point Double  -- ^ The point to get the brdf at
+         -> Vector Double -- ^ The uvw coordinate to get the brdf at
          -> Vector Double -- ^ The direction of the incomming radiance
          -> Vector Double -- ^ The reflected direction
          -> s             -- ^ The reflectance in the specified direction

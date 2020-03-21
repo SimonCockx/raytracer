@@ -1,7 +1,6 @@
 module RayTracer.Core.World
     ( World (objects, lights)
     , createWorld
-    , insertBoundingBoxes
     ) where
 
 import RayTracer.Core.SceneObject
@@ -19,6 +18,3 @@ instance Shape (World s) where
     boundingBox = boundingBox . objects
     boundingVolume = boundingVolume . objects
     numberOfIntersectionTests ray = numberOfIntersectionTests ray . objects
-
-insertBoundingBoxes :: World s -> World s
-insertBoundingBoxes world = world {objects = map boundSceneObject $ objects world}

@@ -3,6 +3,7 @@
 module RayTracer.Lightning.Light
     ( LightSource (..)
     , Light (..)
+    , AmbientLight (..)
     , PointLight (..)
     , LongRangePointLight (..)
     , AreaLight (..)
@@ -42,6 +43,17 @@ instance (LightSource l s) => LightSource (TransformedShape l) s where
             sample = generateSample strat light (t `inverseTransform` p)
 
 
+data AmbientLight s = AmbientLight s
+    deriving (Show)
+
+instance (Show s) => Shape (AmbientLight s) where
+    intersect _ _ = Nothing
+    boundingBox _ = createAABB (pure 1) (pure (-1))
+instance (Show s, Spectrum s) => LightSource (AmbientLight s) s where
+    getRadiance (AmbientLight spectrum) _ _ = spectrum
+    generateSample _ (AmbientLight spectrum) point = return [(point, spectrum)]
+
+
 data PointLight s
     -- | A point light with specified position and radiance.
     --   The intensity diminishes with 1/(squared distance).
@@ -79,7 +91,7 @@ data AreaLight s = AreaLight Double Double s
 
 instance (Show s) => Shape (AreaLight s) where
     intersect ray (AreaLight width height _)
-        | -width/2 <= x && x <= width/2 && -height/2 <= z && z <= height/2 = Just (t, normal)
+        | -width/2 <= x && x <= width/2 && -height/2 <= z && z <= height/2 = Just (t, normal, Vector (x/width) (z/height) 0)
         | otherwise = Nothing
         where
             t = -yo/yd

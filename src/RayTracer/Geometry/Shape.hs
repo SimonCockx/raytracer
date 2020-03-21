@@ -21,7 +21,7 @@ import Data.Maybe
 import Data.List hiding (intersect)
 
 
-type Intersection = (Double, Vector Double)
+type Intersection = (Double, Vector Double, Vector Double)
 
 closest :: (Ord b) => (a -> b) -> Maybe a -> Maybe a -> Maybe a
 closest f = maybeC (\x y -> if f x < f y then x else y)
@@ -34,12 +34,14 @@ closest f = maybeC (\x y -> if f x < f y then x else y)
 {-# INLINE closest #-}
 
 closestIntersection :: Maybe Intersection -> Maybe Intersection -> Maybe Intersection
-closestIntersection = closest fst
+closestIntersection = closest $ \(t, _, _) -> t
 {-# INLINE closestIntersection #-}
 
 -- | A class representing a shape that can be intersected by a ray.
+
 class (Show a) => Shape a where
     -- | Compute the closest intersection of a ray with this shape, if any.
+
     intersect :: Ray Double -> a -> Maybe Intersection
     boundingBox :: a -> AABB
     boundingVolume :: a -> BoundingVolume
@@ -70,31 +72,31 @@ instance Shape BoundingVolume where
 innerIntersect :: Ray Double -> BoundingVolume -> Maybe Intersection
 innerIntersect ray (Bounded _ innerShape) = intersect ray innerShape
 innerIntersect ray (TransformedBoundingVolume _ m innerShape) = do
-    (t, n) <- innerIntersect (inverseTransform m ray) innerShape
-    return (t, normalTransform m n)
+    (t, n, uvw) <- innerIntersect (inverseTransform m ray) innerShape
+    return (t, normalTransform m n, uvw)
 innerIntersect ray (BoundingVolume _ innerVolumes) = intersectVts volumesTs
     where
-        volumesTs = sortOn fst 
-                  $ mapMaybe (\innerVolume -> fmap (\(t, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
-        
+        volumesTs = sortOn fst
+                  $ mapMaybe (\innerVolume -> fmap (\(t, _, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
+
         intersectVts [] = Nothing
         intersectVts ((_, innerVolume):vts) = case innerIntersect ray innerVolume of
             Nothing     -> intersectVts vts
-            Just (t, n) -> foldr (closestIntersection . innerIntersect ray . snd) (Just (t, n)) $ takeWhile ((<t) . fst) vts
+            Just (t, n, uvw) -> foldr (closestIntersection . innerIntersect ray . snd) (Just (t, n, uvw)) $ takeWhile ((<t) . fst) vts
 
 innerNumberOfIntersectionTests :: Ray Double -> BoundingVolume -> Int
 innerNumberOfIntersectionTests ray (Bounded _ innerShape) = numberOfIntersectionTests ray innerShape
-innerNumberOfIntersectionTests ray (TransformedBoundingVolume _ m innerShape) = 
+innerNumberOfIntersectionTests ray (TransformedBoundingVolume _ m innerShape) =
     numberOfIntersectionTests (inverseTransform m ray) innerShape
 innerNumberOfIntersectionTests ray (BoundingVolume _ innerVolumes) = length innerVolumes + nrOfIntersectVts volumesTs
     where
-        volumesTs = sortOn fst 
-                  $ mapMaybe (\innerVolume -> fmap (\(t, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
-        
+        volumesTs = sortOn fst
+                  $ mapMaybe (\innerVolume -> fmap (\(t, _, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
+
         nrOfIntersectVts [] = 0
         nrOfIntersectVts ((_, innerVolume):vts) = innerNumberOfIntersectionTests ray innerVolume + case innerIntersect ray innerVolume of
             Nothing     -> nrOfIntersectVts vts
-            Just (t, _) -> sum $ map (innerNumberOfIntersectionTests ray . snd) $ takeWhile ((<t) . fst) vts
+            Just (t, _, _) -> sum $ map (innerNumberOfIntersectionTests ray . snd) $ takeWhile ((<t) . fst) vts
 
 
 instance (Shape a) => Shape [a] where
@@ -134,8 +136,8 @@ instance (Show a) => Show (TransformedShape a) where
 
 instance (Shape a) => Shape (TransformedShape a) where
     intersect ray (Transformed m s) = do
-        (t, n) <- intersect (inverseTransform m ray) s
-        return (t, normalTransform m n)
+        (t, n, uvw) <- intersect (inverseTransform m ray) s
+        return (t, normalTransform m n, uvw)
     boundingBox (Transformed t s) = t `transform` boundingBox s
     boundingVolume ts@(Transformed t s) = TransformedBoundingVolume (boundingBox ts) t $ boundingVolume s
     numberOfIntersectionTests ray (Transformed t shape) = numberOfIntersectionTests (inverseTransform t ray) shape
@@ -162,10 +164,18 @@ getEnclosingAABB aabbs = createAABB minPoint maxPoint
         minPoint = foldr1 (\(Point x y z) (Point minx miny minz) -> Point (min minx x) (min miny y) (min minz z)) $ map minimumPoint aabbs
         maxPoint = foldr1 (\(Point x y z) (Point maxx maxy maxz) -> Point (max maxx x) (max maxy y) (max maxz z)) $ map maximumPoint aabbs
 instance Shape AABB where
-    intersect ray (AABB (Point minx miny minz) (Point maxx maxy maxz) _)
+    intersect ray (AABB minp@(Point minx miny minz) maxp@(Point maxx maxy maxz) c)
+        | minx < xo && xo < maxx && miny < yo && yo < maxy && minz < zo && zo < maxz = Just (0, Vector 0 0 0, (/) `fmap` (origin ray <-> c) <*> dp)
         | tmax < 0 || tmin > tmax = Nothing
-        | otherwise               = Just (tmin, normal)
+        | otherwise               = Just (tmin, normal, uvw)
         where
+            normal
+                | tmin == tx0 = Vector 1 0 0
+                | tmin == tx1 = Vector (-1) 0 0
+                | tmin == ty0 = Vector 0 1 0
+                | tmin == ty1 = Vector 0 (-1) 0
+                | tmin == tz0 = Vector 0 0 1
+                | otherwise = Vector 0 0 (-1)
             tx0 = (maxx-xo)/xd
             tx1 = (minx-xo)/xd
             ty0 = (maxy-yo)/yd
@@ -173,13 +183,9 @@ instance Shape AABB where
             tz0 = (maxz-zo)/zd
             tz1 = (minz-zo)/zd
             tmin = max (max (min tx0 tx1) (min ty0 ty1)) (min tz0 tz1)
-            normal = if tmin == tx0 then Vector 1 0 0
-                else if tmin == tx1 then Vector (-1) 0 0
-                else if tmin == ty0 then Vector 0 1 0
-                else if tmin == ty1 then Vector 0 (-1) 0
-                else if tmin == tz0 then Vector 0 0 1
-                else Vector 0 0 (-1)
             tmax = min (min (max tx0 tx1) (max ty0 ty1)) (max tz0 tz1)
+            dp = maxp <-> minp
+            uvw = (/) `fmap` (follow ray tmin <-> c) <*> dp
             Point xo yo zo = origin ray
             Vector xd yd zd = direction ray
     boundingBox = id
@@ -190,3 +196,4 @@ instance Transformable AABB Double where
                                        , Point minx maxy minz, Point minx maxy maxz
                                        , Point maxx miny minz, Point maxx miny maxz
                                        , Point maxx maxy minz, Point maxx maxy maxz ]
+
