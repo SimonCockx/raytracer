@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+
 module RayTracer.Core.World
     ( World (objects, lights)
     , createWorld
@@ -11,9 +13,10 @@ data World s = World {objects :: [SceneObject s], lights :: [Light s]}
     deriving (Show)
 
 createWorld :: (Spectrum s) => [SceneObject s] -> [Light s] -> World s
-createWorld os ls = World (map SceneLight ls ++ os) ls
+createWorld os ls = World (map SceneObject ls ++ os) ls
 
 instance Shape (World s) where
+    type BoundedShape (World s) = SceneObject s
     intersect ray (World os _) = intersect ray os
     boundingBox = boundingBox . objects
     boundingVolume = boundingVolume . objects

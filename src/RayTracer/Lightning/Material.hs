@@ -1,48 +1,37 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
 module RayTracer.Lightning.Material
     ( BRDF
-    , Material (..)
-    , WhiteMaterial (..)
-    , BlackMaterial (..)
-    , Diffuse (..)
+    , Material
+    , diffuseBRDF
+    , diffuse
+    , whiteBRDF
+    , whiteMaterial
+    , blackBRDF
+    , blackMaterial
     ) where
 
 import RayTracer.Geometry
 import RayTracer.Lightning.Spectrum
 
-type BRDF s = Vector Double -> Vector Double -> Vector Double -> s
+type BRDF s = Vector Double -> Vector Double -> s
+type Material s = Vector Double -> BRDF s
 
--- | A class representing a material concerning a bidirectional reflectance distribution function (brdf) of a specific spectrum.
-class Material m s where
-    -- | The brdf of this material.
-    brdf :: m
-         -> Vector Double -- ^ The uvw coordinate to get the brdf at
-         -> Vector Double -- ^ The direction of the incomming radiance
-         -> Vector Double -- ^ The reflected direction
-         -> s             -- ^ The reflectance in the specified direction
+uniform :: BRDF s -> Material s
+uniform brdf _ = brdf
 
--- | A type that represents a diffuse, white material.
-data WhiteMaterial = WhiteMaterial
-    deriving (Show)
+diffuseBRDF :: s -> BRDF s
+diffuseBRDF reflectance _ _ = reflectance
 
-instance (Spectrum s) => Material WhiteMaterial s where
-    brdf WhiteMaterial _ _ _ = white
+diffuse :: s -> Material s
+diffuse reflectance = uniform $ diffuseBRDF reflectance
 
--- | A type that represents a diffuse, black material.
-data BlackMaterial = BlackMaterial
-    deriving (Show)
+whiteBRDF :: (Spectrum s) => BRDF s
+whiteBRDF = diffuseBRDF white
 
-instance (Spectrum s) => Material BlackMaterial s where
-    brdf BlackMaterial _ _ _ = black
+whiteMaterial :: (Spectrum s) => Material s
+whiteMaterial = uniform whiteBRDF
 
--- | A type that represents a diffuse material of a specific spectrum.
-data Diffuse s
-    -- | A diffuse material with a specified reflectance.
-    = Diffuse
-        s -- ^ The reflectance of this material
-          --   White represents 100% reflectance.
-    deriving (Show)
+blackBRDF :: (Spectrum s) => BRDF s
+blackBRDF = diffuseBRDF black
 
-instance (Spectrum s) => Material (Diffuse s) s where
-    brdf (Diffuse reflectance) _ _ _ = reflectance
+blackMaterial :: (Spectrum s) => Material s
+blackMaterial = uniform blackBRDF

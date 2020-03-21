@@ -65,8 +65,8 @@ lightningScene = do
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
         floor    = translate 0 (-3) (-9::Double) `transform` createAABox 30 2 30
 
-        world = createWorld [ SceneObject icosahedron $ Diffuse $ RGB 0.4 0 0.1
-                      , SceneObject sphere $ Diffuse $ RGB 1 1 0
+        world = createWorld [ withMaterial icosahedron $ diffuse $ RGB 0.4 0 0.1
+                      , withMaterial sphere $ diffuse $ RGB 1 1 0
                       , simpleObject box
                       , simpleObject cylinder
                       , simpleObject triangle
@@ -111,7 +111,7 @@ lonelyTeapot = do
     teaPot   <- Transformed ((translate (-2::Double) (-2) (-9)) `transform` (scaleUni 2)) <$> readObjFile "objects/teaPot.obj"
     let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
 
-        world = createWorld [ SceneObject teaPot (Diffuse $ RGB 0.8 0.5 0.9)
+        world = createWorld [ withMaterial teaPot (diffuse $ RGB 0.8 0.5 0.9)
                       , simpleObject floor
                       ]
                       [ Light $ LongRangePointLight (Point (-2) 1 (-6)) (RGB 3 1 1)
@@ -125,7 +125,7 @@ siyunScene = do
     let floor = translate (-2) (-5) (-9::Double) `transform` createAABox 20 2 20
         plane = translate 0 (-2) (-13::Double) `transform` rotateY (pi/6::Double) `transform` rotateX (pi/6::Double) `transform` scaleUni (0.03::Double) `transform` planeObj
 
-        world = createWorld [ SceneObject plane (Diffuse $ RGB 0 0.8 0)
+        world = createWorld [ withMaterial plane (diffuse $ RGB 0 0.8 0)
                       , simpleObject floor
                       ]
                       [ Light $ LongRangePointLight (Point (-2) 1 (-6)) (RGB 1 1 1)

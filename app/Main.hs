@@ -16,7 +16,7 @@ createScene = do
     let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
         teaPot = (translate (-0::Double) (-0) (-5)) `transform` (rotateX (-pi/2::Double)) `transform` (scaleUni (0.6::Double)) `transform` teaPotObj
 
-        world = createWorld [ SceneObject teaPot (Diffuse $ RGB 0.8 0.5 0.9)
+        world = createWorld [ withMaterial teaPot (diffuse $ RGB 0.8 0.5 0.9)
                             --, simpleObject floor
                             ]
                             [ --Light $ AmbientLight $ RGB 1 1 1
@@ -61,16 +61,16 @@ main = do
     let scene = createScene
     -- scene >>= print
     -- (show <$> scene) >>= writeFile "test.txt"
-    -- image <- justRender scene
-    -- saveAs "bhv_test" image
-    -- display image
-
-    mapM_ (\n -> do
-        timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
-        putStrLn $ timeStamp ++ " - Iteration " ++ show n
-        img <- justRender $ processScene (extractBVHLayer n) <$> scene
-        saveAs ("BHV_test" ++ show n) img) $ [0..30]
     image <- justRender scene
     saveAs "bhv_test" image
     display image
+
+    -- mapM_ (\n -> do
+    --     timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
+    --     putStrLn $ timeStamp ++ " - Iteration " ++ show n
+    --     img <- justRender $ processScene (extractBVHLayer n) <$> scene
+    --     saveAs ("BHV_test" ++ show n) img) $ [0..30]
+    -- image <- justRender scene
+    -- saveAs "bhv_test" image
+    -- display image
 

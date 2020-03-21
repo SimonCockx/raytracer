@@ -1,4 +1,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module RayTracer.Geometry.Shape
     ( Shape (..)
@@ -38,26 +42,25 @@ closestIntersection = closest $ \(t, _, _) -> t
 {-# INLINE closestIntersection #-}
 
 -- | A class representing a shape that can be intersected by a ray.
-
 class (Show a) => Shape a where
+    type BoundedShape a :: (*)
+    type BoundedShape a = a
     -- | Compute the closest intersection of a ray with this shape, if any.
-
     intersect :: Ray Double -> a -> Maybe Intersection
     boundingBox :: a -> AABB
-    boundingVolume :: a -> BoundingVolume
+    boundingVolume :: a -> BoundingVolume (BoundedShape a)
+    default boundingVolume :: (BoundedShape a ~ a) => a -> BoundingVolume (BoundedShape a)
     boundingVolume shape = Bounded (boundingBox shape) shape
     numberOfIntersectionTests :: Ray Double -> a -> Int
     numberOfIntersectionTests _ _ = 1
 
 
-data BoundingVolume = BoundingVolume AABB [BoundingVolume]
-                    | forall a. (Shape a, Show a) => Bounded AABB a
-                    | TransformedBoundingVolume AABB (Transformation Double) BoundingVolume
-instance Show BoundingVolume where
-    show (BoundingVolume box innerVolumes) = "BoundingVolume (" ++ show box ++ ") (" ++ show innerVolumes ++ ")"
-    show (Bounded box shape) = "Bounded (" ++ show box ++ ") (" ++ show shape ++ ")"
-    show (TransformedBoundingVolume box t innerVolume) = "TransformedBoundingVolume (" ++ show box ++ ") (" ++ show t ++ ") (" ++ show innerVolume ++ ")"
-instance Shape BoundingVolume where
+data BoundingVolume a = BoundingVolume AABB [BoundingVolume a]
+                      | Bounded AABB a
+                      | TransformedBoundingVolume AABB (Transformation Double) (BoundingVolume a)
+    deriving (Show)
+instance (Shape a) => Shape (BoundingVolume a) where
+    type BoundedShape (BoundingVolume a) = a
     intersect ray volume = case intersect ray $ boundingBox volume of
         Nothing -> Nothing
         Just _  -> innerIntersect ray volume
@@ -69,7 +72,7 @@ instance Shape BoundingVolume where
         Nothing -> 0
         Just _  -> innerNumberOfIntersectionTests ray volume
 
-innerIntersect :: Ray Double -> BoundingVolume -> Maybe Intersection
+innerIntersect :: (Shape a) => Ray Double -> BoundingVolume a -> Maybe Intersection
 innerIntersect ray (Bounded _ innerShape) = intersect ray innerShape
 innerIntersect ray (TransformedBoundingVolume _ m innerShape) = do
     (t, n, uvw) <- innerIntersect (inverseTransform m ray) innerShape
@@ -84,7 +87,7 @@ innerIntersect ray (BoundingVolume _ innerVolumes) = intersectVts volumesTs
             Nothing     -> intersectVts vts
             Just (t, n, uvw) -> foldr (closestIntersection . innerIntersect ray . snd) (Just (t, n, uvw)) $ takeWhile ((<t) . fst) vts
 
-innerNumberOfIntersectionTests :: Ray Double -> BoundingVolume -> Int
+innerNumberOfIntersectionTests :: (Shape a) => Ray Double -> BoundingVolume a -> Int
 innerNumberOfIntersectionTests ray (Bounded _ innerShape) = numberOfIntersectionTests ray innerShape
 innerNumberOfIntersectionTests ray (TransformedBoundingVolume _ m innerShape) =
     numberOfIntersectionTests (inverseTransform m ray) innerShape
@@ -99,7 +102,8 @@ innerNumberOfIntersectionTests ray (BoundingVolume _ innerVolumes) = length inne
             Just (t, _, _) -> sum $ map (innerNumberOfIntersectionTests ray . snd) $ takeWhile ((<t) . fst) vts
 
 
-instance (Shape a) => Shape [a] where
+instance (Shape a, Shape (BoundedShape a)) => Shape [a] where
+    type BoundedShape [a] = BoundedShape a
     intersect ray = foldr (closestIntersection . intersect ray) Nothing
     boundingBox shapes = getEnclosingAABB $ map boundingBox shapes
     boundingVolume shapes = splitBoundingVolumes (boundingBox bvs) bvs
@@ -107,7 +111,7 @@ instance (Shape a) => Shape [a] where
             bvs = map boundingVolume shapes
     numberOfIntersectionTests ray = sum . map (numberOfIntersectionTests ray)
 
-splitBoundingVolumes :: AABB -> [BoundingVolume] -> BoundingVolume
+splitBoundingVolumes :: (Shape a) => AABB -> [BoundingVolume a] -> BoundingVolume a
 splitBoundingVolumes _ [bv] = bv
 splitBoundingVolumes box bvs
     | areaX <= areaY && areaX <= areaZ = BoundingVolume box [splitBoundingVolumes leftBoxX leftX, splitBoundingVolumes rightBoxX rightX]
@@ -135,10 +139,17 @@ instance (Show a) => Show (TransformedShape a) where
     show (Transformed t s) = "Transformed (" ++ show t ++ ") (" ++ show s ++ ")"
 
 instance (Shape a) => Shape (TransformedShape a) where
+    type BoundedShape (TransformedShape a) = BoundedShape a
     intersect ray (Transformed m s) = do
         (t, n, uvw) <- intersect (inverseTransform m ray) s
         return (t, normalTransform m n, uvw)
-    boundingBox (Transformed t s) = t `transform` boundingBox s
+    boundingBox (Transformed t s) = getAABB points
+        where
+            AABB (Point minx miny minz) (Point maxx maxy maxz) _ = boundingBox s
+            points = map (transform t) [ Point minx miny minz, Point minx miny maxz
+                                       , Point minx maxy minz, Point minx maxy maxz
+                                       , Point maxx miny minz, Point maxx miny maxz
+                                       , Point maxx maxy minz, Point maxx maxy maxz ]
     boundingVolume ts@(Transformed t s) = TransformedBoundingVolume (boundingBox ts) t $ boundingVolume s
     numberOfIntersectionTests ray (Transformed t shape) = numberOfIntersectionTests (inverseTransform t ray) shape
 
@@ -189,11 +200,3 @@ instance Shape AABB where
             Point xo yo zo = origin ray
             Vector xd yd zd = direction ray
     boundingBox = id
-instance Transformable AABB Double where
-    transform t (AABB (Point minx miny minz) (Point maxx maxy maxz) _) = getAABB points
-        where
-            points = map (transform t) [ Point minx miny minz, Point minx miny maxz
-                                       , Point minx maxy minz, Point minx maxy maxz
-                                       , Point maxx miny minz, Point maxx miny maxz
-                                       , Point maxx maxy minz, Point maxx maxy maxz ]
-
