@@ -44,6 +44,12 @@ dependencies:
 default-extensions:
 - MultiParamTypeClasses
 - FlexibleInstances
+- TypeFamilies
+- ExistentialQuantification
+- PatternSynonyms
+- DefaultSignatures
+- StandaloneDeriving
+- GeneralizedNewtypeDeriving
 
 library:
   source-dirs: src

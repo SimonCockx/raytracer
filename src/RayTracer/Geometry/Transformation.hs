@@ -79,7 +79,7 @@ class Transformable v a where
 
 instance (Num a) => Transformable (Matrix a) a where
     transform (Transformation mat _) = transformMatrix mat
-instance (Num a) => Transformable (Transformation a) a where
+instance (Num a, a ~ b) => Transformable (Transformation a) b where
     transform (Transformation mat1 inv1) (Transformation mat2 inv2) = Transformation mat inv
         where
             mat = transformMatrix mat1 mat2

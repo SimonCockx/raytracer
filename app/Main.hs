@@ -13,7 +13,7 @@ camera = createPerspectiveCamera 1920 1050 (Point 5 1 (-1.4)) (Vector (-1) (-0.3
 createScene :: IO (Scene RGB)
 createScene = do
     teaPotObj   <- readObjFile "objects/magikarp.obj"
-    let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
+    let floor = translate (-2) (-3) (-9::Double) `transform` createBox 20 2 20
         teaPot = (translate (-0::Double) (-0) (-5)) `transform` (rotateX (-pi/2::Double)) `transform` (scaleUni (0.6::Double)) `transform` teaPotObj
 
         world = createWorld [ withMaterial teaPot (diffuse $ RGB 0.8 0.5 0.9)
@@ -58,9 +58,9 @@ display = displayImageUsing defaultViewer True
 
 main :: IO ()
 main = do
-    let scene = createScene
-    -- scene >>= print
-    -- (show <$> scene) >>= writeFile "test.txt"
+    let scene = processScene insertBoundingBoxes <$> shapeScene
+    scene >>= print
+    (show <$> scene) >>= writeFile "test.txt"
     image <- justRender scene
     saveAs "bhv_test" image
     display image

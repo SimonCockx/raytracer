@@ -31,10 +31,11 @@ extractBVHLayer :: Int -> World s -> World RGB
 extractBVHLayer depth world = insertBoundingBoxes $ createWorld boxes []
     where
         bvhs = boundingVolume world
-        extractBoxes :: Int -> BoundingVolume (SceneObject s) -> [SceneObject RGB]
+        extractBoxes :: Int -> BoundedNode d -> [SceneObject RGB]
         extractBoxes 0 bvh = [SceneObject $ Surface (boundingBox bvh) bvMaterial]
         extractBoxes d bvh = case bvh of
-            BoundingVolume _ innerVolumes -> concatMap (extractBoxes $ d-1) innerVolumes
-            Bounded _ _ -> []
-            TransformedBoundingVolume _ t innerVolume -> [SceneObject $ Transformed t (extractBoxes (d-1) innerVolume)]
+            BoxNode _ innerVolumes -> concatMap (extractBoxes $ d-1) innerVolumes
+            BoundedNode _ _ -> []
+            TransformedBoundedNode _ t innerVolume -> [SceneObject $ Transformed t (extractBoxes (d-1) innerVolume)]
+            SubtreeNode _ innerVolume -> extractBoxes d innerVolume
         boxes = extractBoxes depth bvhs

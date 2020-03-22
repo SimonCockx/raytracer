@@ -25,7 +25,7 @@ shapeScene = do
     icosahedron <- Transformed (translate 4 1 (-9::Double) `transform` (scaleUni 3)) <$> readObjFile "objects/icosahedron.obj"
     let elipse   = translate 0 (-2) (-10::Double) `transform` (rotateZ (pi/4 :: Double)) `transform` (scale (1 :: Double) 2 1) `transform` (createSphere 1.5)
         sphere   = translate (-2) 0.5 (-11::Double) `transform` createSphere 1.5
-        box      = translate (-5) (-2) (-9::Double) `transform` createAABox 0.5 1 5
+        box      = translate (-5) (-2) (-9::Double) `transform` createBox 0.5 1 5
         cylinder = translate 7 (-5) (-10::Double) `transform` (rotateZ (pi/18 :: Double)) `transform` createCylinder 1 3
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
 
@@ -60,10 +60,10 @@ lightningScene :: IO (Scene RGB)
 lightningScene = do
     icosahedron <- Transformed ((translate (4::Double) 1 (-10)) `transform` (scaleUni 3)) <$> readObjFile "objects/icosahedron.obj"
     let sphere   = translate (-2) 0.5 (-11::Double) `transform` createSphere 1.5
-        box      = translate (-5) (-1) (-9::Double) `transform` createAABox 0.5 1 5
+        box      = translate (-5) (-1) (-9::Double) `transform` createBox 0.5 1 5
         cylinder = translate 6 (-2) (-8::Double) `transform` createCylinder 1 3
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
-        floor    = translate 0 (-3) (-9::Double) `transform` createAABox 30 2 30
+        floor    = translate 0 (-3) (-9::Double) `transform` createBox 30 2 30
 
         world = createWorld [ withMaterial icosahedron $ diffuse $ RGB 0.4 0 0.1
                       , withMaterial sphere $ diffuse $ RGB 1 1 0
@@ -86,7 +86,7 @@ coloryScene = do
     icosahedron <- Transformed (translate 4 1 (-9::Double) `transform` scaleUni 3) <$> readObjFile "objects/icosahedron.obj"
     let elipse   = translate 0 (-2) (-10::Double) `transform` (rotateZ (pi/4 :: Double)) `transform` (scale (1 :: Double) 2 1) `transform` (createSphere 1.5)
         sphere   = translate 2 0.5 (-11::Double) `transform` createSphere 1.5
-        box      = translate (-5) (-2) (-9::Double) `transform` createAABox 0.5 1 5
+        box      = translate (-5) (-2) (-9::Double) `transform` createBox 0.5 1 5
         cylinder = translate 7 (-5) (-10::Double) `transform` createCylinder 1 3
         triangle = createTriangle (Point (-8) 0 (-8)) (Point (-3) 2 (-8)) (Point (-6) 5 (-8))
 
@@ -109,7 +109,7 @@ coloryScene = do
 lonelyTeapot :: IO (Scene RGB)
 lonelyTeapot = do
     teaPot   <- Transformed ((translate (-2::Double) (-2) (-9)) `transform` (scaleUni 2)) <$> readObjFile "objects/teaPot.obj"
-    let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
+    let floor = translate (-2) (-3) (-9::Double) `transform` createBox 20 2 20
 
         world = createWorld [ withMaterial teaPot (diffuse $ RGB 0.8 0.5 0.9)
                       , simpleObject floor
@@ -122,7 +122,7 @@ lonelyTeapot = do
 siyunScene :: IO (Scene RGB)
 siyunScene = do
     planeObj   <- readObjFile "objects/plane-siyun.obj"
-    let floor = translate (-2) (-5) (-9::Double) `transform` createAABox 20 2 20
+    let floor = translate (-2) (-5) (-9::Double) `transform` createBox 20 2 20
         plane = translate 0 (-2) (-13::Double) `transform` rotateY (pi/6::Double) `transform` rotateX (pi/6::Double) `transform` scaleUni (0.03::Double) `transform` planeObj
 
         world = createWorld [ withMaterial plane (diffuse $ RGB 0 0.8 0)
