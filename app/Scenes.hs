@@ -6,6 +6,18 @@ import Prelude hiding (floor)
 camera1 :: PerspectiveCamera
 camera1 = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
 
+softShadowScene :: IO (Scene Gray)
+softShadowScene = do
+    let floor = translate (-2) (-3) (-9::Double) `transform` createAABox 20 2 20
+        wall = (translate (-0.5::Double) (-0) (-6.5)) `transform` createAABox 0.1 4 4
+
+        world = createWorld [ simpleObject wall
+                            , simpleObject floor
+                            ]
+                            [ Light $ Transformed (translate 2.5 1 (-6.5::Double) `transform` rotateZ (-pi/4::Double)) $ AreaLight 4.5 4.5 $ Gray 1
+                            ]
+    return $ Scene (insertBoundingBoxes world) camera1
+
 sphereLineScene :: IO (Scene RGB)
 sphereLineScene = do
     let n = 8

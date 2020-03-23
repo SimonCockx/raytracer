@@ -33,6 +33,8 @@ dependencies:
 - MonadRandom
 - scheduler
 - unordered-containers
+- cassava
+- bytestring
 # benchmarks
 - criterion
 # tests
