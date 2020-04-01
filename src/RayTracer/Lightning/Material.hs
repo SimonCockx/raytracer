@@ -6,10 +6,16 @@ module RayTracer.Lightning.Material
     , WhiteMaterial (..)
     , BlackMaterial (..)
     , Diffuse (..)
+    , TextureMap
+    , DiffuseTexture (..)
+    , readTextureMap
+    , ProceduralDiffuseTexture (..)
     ) where
 
 import RayTracer.Geometry
 import RayTracer.Lightning.Spectrum
+import Data.Massiv.Array as A
+import qualified Data.Massiv.Array.IO as MIO
 
 type BRDF s = Vector Double -> Vector Double -> Vector Double -> s
 
@@ -46,3 +52,34 @@ data Diffuse s
 
 instance (Spectrum s) => Material (Diffuse s) s where
     brdf (Diffuse reflectance) _ _ _ = reflectance
+
+
+type TextureMap s = Array B Ix2 s
+
+data DiffuseTexture s = DiffuseTexture (TextureMap s) (Vector Double -> (Double, Double))
+
+instance (Show s) => Show (DiffuseTexture s) where
+    show (DiffuseTexture tmap _) = "DiffuseTexture (" ++ show tmap ++ ")"
+
+instance (Spectrum s) => Material (DiffuseTexture s) s where
+    brdf (DiffuseTexture imgMap proj) uvw _ _ = evaluate' imgMap (r :. c)
+        where
+            Sz (rows :. columns) = size imgMap
+            (u, v) = proj uvw
+            rem' x y = x - y * fromIntegral (floor (x/y) :: Int)
+            c = floor $ fromIntegral columns * (u `rem'` 1)
+            r = rows - 1 - floor (fromIntegral rows * (v `rem'` 1))
+
+readTextureMap :: (Spectrum s) => FilePath -> IO (TextureMap s)
+readTextureMap path = do
+    img <- MIO.readImageAuto path :: IO Image
+    return $ computeAs B $ A.map fromPixel img
+
+
+data ProceduralDiffuseTexture s = ProceduralDiffuseTexture (Vector Double -> s)
+
+instance Show (ProceduralDiffuseTexture s) where
+    show _ = "ProceduralDiffuseTexture"
+
+instance (Spectrum s) => Material (ProceduralDiffuseTexture s) s where
+    brdf (ProceduralDiffuseTexture toReflectance) uvw _ _ = toReflectance uvw

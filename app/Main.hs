@@ -13,19 +13,33 @@ import Scenes
 
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
+camera = createPerspectiveCamera 400 400 (Point 0 8 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 3)
 
 createScene :: IO (Scene RGB)
 createScene = do
-    let sphere = translate 0 0 (-3::Double) `transform` rotateZ (pi/4::Double) `transform` createAABox 2 2 0.01
+    teaPotObj <- readObjFile "objects/teaPot.obj"
+    vlekje <- readTextureMap "objects/vlekje.png" :: IO (TextureMap RGB)
+    let floor = translate 0 (0::Double) 0 `transform` createAABox 50 2 50
+        left  = translate (-8:: Double) 0 0 `transform` createAABox 2 50 50
+        right = translate (8::Double) 0 0 `transform` createAABox 2 50 50
+        back  = translate 0 0 (-16::Double) `transform` createAABox 50 50 2
+        top = translate 0 (16::Double) 0 `transform` createAABox 50 2 50
+        teaPot1 = Transformed ((translate (5::Double) 9 (-13)) `transform` (scaleUni (3::Double)) `transform` rotateY (-pi/6::Double)) teaPotObj
+        teaPot2 = Transformed ((translate (0::Double) 1 (-10)) `transform` (scaleUni 4)) teaPotObj
 
-        world = createWorld [ SceneObject sphere $ Diffuse $ RGB 1 0 0.5
-                            ]
-                            [ Light $ LongRangePointLight (Point 2 0 0) $ RGB 1 1 1
-                            ]
+        world = createWorld [ SceneObject teaPot1 (DiffuseTexture vlekje (\(Vector u v w) -> (u, v)))
+                      , SceneObject teaPot2 (Diffuse $ RGB 0.6 0.1 0.3)
+                      , simpleObject floor
+                      , SceneObject left (Diffuse $ RGB 1 0 0)
+                      , SceneObject back (Diffuse $ RGB 0 1 0)
+                      , SceneObject right (Diffuse $ RGB 0 0 1)
+                      , simpleObject top
+                      ]
+                      [ Light $ Transformed (translate 0 14.5 (-8::Double)) $ AreaLight 4 4 $ RGB 2 2 2
+                      ]
     return $ Scene (insertBoundingBoxes world) camera
 
-rayTracer = SpectrumIndependentRayTracer $ Random 100
+rayTracer = SpectrumIndependentRayTracer $ Random 10
 
 renderFast :: (Spectrum s) => IO (Scene s) -> IO Image
 renderFast getScene = do
@@ -65,7 +79,7 @@ measureRadiance = do
         umbraPoint = 150 :. 60
         shadowRays = [1..1000]
         measurements = 100
-    Scene world camera <- createScene
+    Scene world camera <- softShadowScene
     h <- openFile "out/lightRads.csv" WriteMode
     hClose h
     h <- openFile "out/penumbraRads.csv" WriteMode
@@ -104,22 +118,23 @@ measureRadiance = do
     return ()
 
 
-main :: IO ()
-main = do
-    -- measureRadiance
-    let scene = createScene
-    -- -- scene >>= print
-    -- (show <$> scene) >>= writeFile "test.txt"
+displayBHVLayer :: (Spectrum s) => IO (Scene s) -> IO ()
+displayBHVLayer scene = do
+    mapM_ (\n -> do
+        timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
+        putStrLn $ timeStamp ++ " - Iteration " ++ show n
+        img <- justRender $ processScene (extractBVHLayer n) <$> scene
+        saveAs ("BHV_test" ++ show n) img) $ [0..30]
     image <- justRender scene
-    saveAs "aa" image
+    saveAs "bhv_test" image
     display image
 
-    -- mapM_ (\n -> do
-    --     timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
-    --     putStrLn $ timeStamp ++ " - Iteration " ++ show n
-    --     img <- justRender $ processScene (extractBVHLayer n) <$> scene
-    --     saveAs ("BHV_test" ++ show n) img) $ [0..30]
-    -- image <- justRender scene
-    -- saveAs "bhv_test" image
-    -- display image
 
+main :: IO ()
+main = do
+    let getScene = createScene
+    -- scene >>= print
+    -- (show <$> scene) >>= writeFile "test.txt"
+    let image = justRender getScene
+    saveAs "test" image
+    -- display image
