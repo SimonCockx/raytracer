@@ -13,29 +13,31 @@ import Scenes
 
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 400 400 (Point 0 8 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 3)
+camera = createPerspectiveCamera 400 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 3)
 
 createScene :: IO (Scene RGB)
 createScene = do
     teaPotObj <- readObjFile "objects/teaPot.obj"
     vlekje <- readTextureMap "objects/vlekje.png" :: IO (TextureMap RGB)
-    let floor = translate 0 (0::Double) 0 `transform` createAABox 50 2 50
-        left  = translate (-8:: Double) 0 0 `transform` createAABox 2 50 50
-        right = translate (8::Double) 0 0 `transform` createAABox 2 50 50
-        back  = translate 0 0 (-16::Double) `transform` createAABox 50 50 2
-        top = translate 0 (16::Double) 0 `transform` createAABox 50 2 50
+    let floor = translate 0 (0::Double) 0 `transform` createBox 50 2 50
+        left  = translate (-8:: Double) 0 0 `transform` createBox 2 50 50
+        right = translate (8::Double) 0 0 `transform` createBox 2 50 50
+        back  = translate 0 0 (-16::Double) `transform` createBox 50 50 2
+        top = translate 0 (16::Double) 0 `transform` createBox 50 2 50
         teaPot1 = Transformed ((translate (5::Double) 9 (-13)) `transform` (scaleUni (3::Double)) `transform` rotateY (-pi/6::Double)) teaPotObj
         teaPot2 = Transformed ((translate (0::Double) 1 (-10)) `transform` (scaleUni 4)) teaPotObj
+        light = Transformed (translate 0 14.5 (-8::Double)) $ AreaLight 4 4 $ RGB 2 2 2
 
-        world = createWorld [ SceneObject teaPot1 (DiffuseTexture vlekje (\(Vector u v w) -> (u, v)))
-                      , SceneObject teaPot2 (Diffuse $ RGB 0.6 0.1 0.3)
+        world = World [ withMaterial teaPot1 (DiffuseTexture vlekje (\(Vector u v w) -> (u, v)))
+                      , withMaterial teaPot2 (Diffuse $ RGB 0.6 0.1 0.3)
                       , simpleObject floor
-                      , SceneObject left (Diffuse $ RGB 1 0 0)
-                      , SceneObject back (Diffuse $ RGB 0 1 0)
-                      , SceneObject right (Diffuse $ RGB 0 0 1)
+                      , withMaterial left (Diffuse $ RGB 1 0 0)
+                      , withMaterial back (Diffuse $ RGB 0 1 0)
+                      , withMaterial right (Diffuse $ RGB 0 0 1)
                       , simpleObject top
+                      , SceneLight light
                       ]
-                      [ Light $ Transformed (translate 0 14.5 (-8::Double)) $ AreaLight 4 4 $ RGB 2 2 2
+                      [ Light light
                       ]
     return $ Scene (insertBoundingBoxes world) camera
 
@@ -118,23 +120,21 @@ measureRadiance = do
     return ()
 
 
-displayBHVLayer :: (Spectrum s) => IO (Scene s) -> IO ()
-displayBHVLayer scene = do
-    mapM_ (\n -> do
-        timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
-        putStrLn $ timeStamp ++ " - Iteration " ++ show n
-        img <- justRender $ processScene (extractBVHLayer n) <$> scene
-        saveAs ("BHV_test" ++ show n) img) $ [0..30]
-    image <- justRender scene
-    saveAs "bhv_test" image
-    display image
+displayBHVLayers :: Int -> String -> IO (Scene s) -> IO ()
+displayBHVLayers depth name scene = mapM_ (\n -> do
+    timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
+    putStrLn $ timeStamp ++ " - Iteration " ++ show n
+    scene >>= print . processScene (extractBVHLayer n)
+    img <- render gen DiffuseRayTracer . processScene (extractBVHLayer n) <$> scene
+    saveAs (name ++ show n) img) $ [0..depth]
 
 
 main :: IO ()
 main = do
-    let getScene = createScene
-    -- scene >>= print
-    -- (show <$> scene) >>= writeFile "test.txt"
-    let image = justRender getScene
-    saveAs "test" image
+    let getScene = processScene insertBoundingBoxes <$> shapeScene
+    -- getScene >>= print
+    -- (show <$> getScene) >>= writeFile "test.txt"
+    -- image <- justRender getScene
+    -- saveAs "test" image
     -- display image
+    displayBHVLayers 10 "BHV-final-test" getScene

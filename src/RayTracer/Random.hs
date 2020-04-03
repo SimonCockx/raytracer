@@ -14,8 +14,8 @@ module RayTracer.Random
     ) where
 
 import System.Random
-import Control.Monad.Random
-import Control.Monad.Random.Lazy
+import Control.Monad.Random hiding (uniform)
+import Control.Monad.Random.Lazy hiding (uniform)
 import System.Random.SplitMix
 import Data.Massiv.Array hiding (map)
 import qualified Data.Massiv.Array as A

@@ -13,7 +13,7 @@ data Ray a
     = Ray {
         -- | Return the origin of the ray.
         origin :: Point a,
-        -- | Return the normalized direction of the ray.
+        -- | Return the direction of the ray.
         direction :: Vector a}
     deriving (Show)
 

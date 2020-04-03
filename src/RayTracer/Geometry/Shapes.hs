@@ -1,8 +1,7 @@
 module RayTracer.Geometry.Shapes
-    ( Sphere (..)
+    ( createBox
+    , Sphere (..)
     , createSphere
-    , aaCube
-    , createAABox
     , Cylinder (..)
     , createCylinder
     , createTriangle
@@ -14,16 +13,21 @@ import RayTracer.Geometry.Shape
 import RayTracer.Geometry.Vector
 import RayTracer.Geometry.Transformation
 import RayTracer.Geometry.Ray
+import RayTracer.Geometry.Bounded
 
 import Safe
 import Text.Read
 import Data.List.Split
 
 
+createBox :: Double -> Double -> Double -> Transformed AABB
+createBox x y z = Transformed (scale x y z) $ createAABB (pure (-0.5)) $ pure 0.5
+
 -- | A type representing a unit sphere.
 data Sphere = Sphere
     deriving (Show)
-
+instance Boundable Sphere where
+    boundingBox Sphere = createAABB (pure (-1)) (pure 1)
 instance Shape Sphere where
     intersect ray Sphere
         | d < 0     = Nothing
@@ -42,22 +46,15 @@ instance Shape Sphere where
             d = b*b - 4*a*c
             l = direction ray
             o = origin ray
-    boundingBox Sphere = createAABB (pure (-1)) (pure 1)
 
-createSphere :: Double -> TransformedShape Sphere
+createSphere :: Double -> Transformed Sphere
 createSphere radius = Transformed (scaleUni radius) Sphere
-
-
-aaCube :: AABB
-aaCube = createAABB (pure (-0.5)) (pure 0.5)
-
-createAABox :: Double -> Double -> Double -> TransformedShape AABB
-createAABox xSize ySize zSize = Transformed (scale xSize ySize zSize) aaCube
-
 
 
 data Cylinder = Cylinder
     deriving (Show)
+instance Boundable Cylinder where
+    boundingBox Cylinder = createAABB (Point (-1) (-0.5) (-1)) (Point 1 0.5 1)
 instance Shape Cylinder where
     intersect ray Cylinder = closestIntersection upperIntersection $ closestIntersection lowerIntersection surfaceIntersection
         where
@@ -93,9 +90,8 @@ instance Shape Cylinder where
                              y2 = yo + t2*yd in
                         if t2 >= 0 && -0.5 <= y2 && y2 <= 0.5 then Just (t2, getSurfaceNormal t2, zeroV)
                         else Nothing
-    boundingBox Cylinder = createAABB (Point (-1) (-0.5) (-1)) (Point 1 0.5 1)
 
-createCylinder :: Double -> Double -> TransformedShape Cylinder
+createCylinder :: Double -> Double -> Transformed Cylinder
 createCylinder radius l = Transformed (scale radius l radius) Cylinder
 
 
@@ -122,11 +118,12 @@ createTriangle p0 p1 p2 = Triangle p0 p1 p2 n betaVector gammaVector
         n = normalize $ e0 `cross` e1
         betaVector = ((normSqr e1 *^ e0) ^-^ (e0<.>e1 *^ e1)) ^/ (normSqr e0 * normSqr e1 - (e0 <.> e1)^(2 :: Int))
         gammaVector = ((e0<.>e1 *^ e0) ^-^ (normSqr e0 *^ e1)) ^/ ((e0 <.> e1)^(2 :: Int) - normSqr e0 * normSqr e1)
+instance Boundable Triangle where
+    boundingBox (Triangle p0 p1 p2 _ _ _) = getAABB [p0, p1, p2]
 instance Shape Triangle where
     intersect ray (Triangle p0 p1 p2 n bV cV) = do
         (t, alpha, beta, gamma) <- intersectTriangle ray p0 p1 p2 n bV cV
         return (t, n, Vector alpha beta gamma)
-    boundingBox (Triangle p0 p1 p2 _ _ _) = getAABB [p0, p1, p2]
 instance Transformable Triangle Double where
     transform t (Triangle p0 p1 p2 _ _ _) = createTriangle (transform t p0) (transform t p1) (transform t p2)
 
@@ -148,11 +145,12 @@ createMeshTriangle v0 v1 v2 = MeshTriangle v0 v1 v2 n betaVector gammaVector
         gammaVector = ((e0<.>e1 *^ e0) ^-^ (normSqr e0 *^ e1)) ^/ ((e0 <.> e1)^(2 :: Int) - normSqr e0 * normSqr e1)
 toTriangle :: MeshTriangle -> Triangle
 toTriangle (MeshTriangle (Vertex p0 _ _) (Vertex p1 _ _) (Vertex p2 _ _) n aV bV) = Triangle p0 p1 p2 n aV bV
+instance Boundable MeshTriangle where
+    boundingBox (MeshTriangle (Vertex p0 _ _) (Vertex p1 _ _) (Vertex p2 _ _) _ _ _) = getAABB [p0, p1, p2]
 instance Shape MeshTriangle where
     intersect ray (MeshTriangle (Vertex p0 t0 n0) (Vertex p1 t1 n1) (Vertex p2 t2 n2) n bV cV) = do
         (t, alpha, beta, gamma) <- intersectTriangle ray p0 p1 p2 n bV cV
         return (t, alpha*^n0 ^+^ beta*^n1 ^+^ gamma*^n2, alpha*^t0 ^+^ beta*^t1 ^+^ gamma*^t2)
-    boundingBox (MeshTriangle (Vertex p0 _ _) (Vertex p1 _ _) (Vertex p2 _ _) _ _ _) = getAABB [p0, p1, p2]
 instance Transformable MeshTriangle Double where
     transform t (MeshTriangle (Vertex p0 t0 n0) (Vertex p1 t1 n1) (Vertex p2 t2 n2) _ _ _) =
         createMeshTriangle (Vertex (transform t p0) t0 (normalTransform t n0)) (Vertex (transform t p1) t1 (normalTransform t n1)) (Vertex (transform t p2) t2 (normalTransform t n2))

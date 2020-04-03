@@ -1,6 +1,7 @@
 module RayTracer.Geometry.Transformation
     ( Transformation
     , Transformable (..)
+    , Transformed (..)
     , inverse
     , normalTransform
     , inverseNormalTransform
@@ -79,7 +80,7 @@ class Transformable v a where
 
 instance (Num a) => Transformable (Matrix a) a where
     transform (Transformation mat _) = transformMatrix mat
-instance (Num a) => Transformable (Transformation a) a where
+instance (Num a, a ~ b) => Transformable (Transformation a) b where
     transform (Transformation mat1 inv1) (Transformation mat2 inv2) = Transformation mat inv
         where
             mat = transformMatrix mat1 mat2
@@ -90,6 +91,12 @@ instance (Num a) => Transformable (Point a) a where
     transform (Transformation mat _) = transformPoint mat
 instance (Transformable t a) => Transformable [t] a where
     transform trans = map (transform trans)
+
+
+data Transformed a = Transformed (Transformation Double) a
+    deriving (Show)
+instance Transformable (Transformed a) Double where
+    transform t (Transformed t' s) = Transformed (t `transform` t') s
 
 
 -- | Invert a transformation.

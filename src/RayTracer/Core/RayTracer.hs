@@ -89,9 +89,9 @@ instance (Spectrum s) => RayTracer DiffuseRayTracer s where
     traceRay _ world ray = do
         pixel <- case findHit ray $ objects world of
                  Nothing -> return black
-                 Just (_, brd, (_, n, uvw)) -> do
+                 Just (Hit s brdf (_, n, _)) -> do
                      let l_out = negateV $ direction ray
-                     return $ max 0 (l_out <.> n) *^ brd uvw l_out l_out
+                     return $ max 0 (l_out <.> n) *^ (brdf l_out l_out ^+^ s)
         return $ toRGB $ gammaCorrect pixel
 
 
@@ -114,22 +114,22 @@ isVisible p1 p2 world
 -- | A type representing a ray tracer that traces direct lightning for any spectrum.
 newtype SpectrumIndependentRayTracer = SpectrumIndependentRayTracer SamplingStrategy
 
-filterRadianceSample :: (Spectrum s) => [(Point Double, s)] -> World s -> Ray Double -> BRDF s -> Point Double -> Vector Double -> Vector Double -> s
-filterRadianceSample sample world ray brd point normal uvw = sumV radiances
+filterRadianceSample :: (Spectrum s) => [(Point Double, s)] -> World s -> Ray Double -> BRDF s -> Point Double -> Vector Double -> s
+filterRadianceSample sample world ray brdf point normal = sumV radiances
     where
         l_out = negateV $ direction ray
         visibleSample = filter (\(p, _) -> isVisible point p world) sample
         radiances = map (\(p, s) -> let l_in = if p == point then normal else normalize $ p <-> point in
-                                    max 0 (l_in <.> normal) *^ brd uvw l_in l_out ^*^ s) visibleSample
+                                    max 0 (l_in <.> normal) *^ brdf l_in l_out ^*^ s) visibleSample
 
 
 instance (Spectrum s) => RayTracer SpectrumIndependentRayTracer s where
     traceRay (SpectrumIndependentRayTracer strat) world ray = do
         pixel <- case findHit ray $ objects world of
                  Nothing -> return black
-                 Just (le, brd, (t, n, uvw)) -> do
+                 Just (Hit le brdf (t, n, _)) -> do
                      let p  = shadowPoint (follow ray t) n
                      samples <- mapM (\light -> generateSample strat light p) $ lights world
-                     return $ foldr ((^+^) . (\sample -> filterRadianceSample sample world ray brd p n uvw)) le samples
+                     return $ foldr ((^+^) . (\sample -> filterRadianceSample sample world ray brdf p n)) le samples
         return $ toRGB $ gammaCorrect pixel
 
