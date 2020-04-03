@@ -27,7 +27,6 @@ createBox x y z = Transformed (scale x y z) $ createAABB (pure (-0.5)) $ pure 0.
 data Sphere = Sphere
     deriving (Show)
 instance Boundable Sphere where
-    type BoundedContent Sphere = Shape
     boundingBox Sphere = createAABB (pure (-1)) (pure 1)
 instance Shape Sphere where
     intersect ray Sphere
@@ -55,7 +54,6 @@ createSphere radius = Transformed (scaleUni radius) Sphere
 data Cylinder = Cylinder
     deriving (Show)
 instance Boundable Cylinder where
-    type BoundedContent Cylinder = Shape
     boundingBox Cylinder = createAABB (Point (-1) (-0.5) (-1)) (Point 1 0.5 1)
 instance Shape Cylinder where
     intersect ray Cylinder = closestIntersection upperIntersection $ closestIntersection lowerIntersection surfaceIntersection
@@ -121,7 +119,6 @@ createTriangle p0 p1 p2 = Triangle p0 p1 p2 n betaVector gammaVector
         betaVector = ((normSqr e1 *^ e0) ^-^ (e0<.>e1 *^ e1)) ^/ (normSqr e0 * normSqr e1 - (e0 <.> e1)^(2 :: Int))
         gammaVector = ((e0<.>e1 *^ e0) ^-^ (normSqr e0 *^ e1)) ^/ ((e0 <.> e1)^(2 :: Int) - normSqr e0 * normSqr e1)
 instance Boundable Triangle where
-    type BoundedContent Triangle = Shape
     boundingBox (Triangle p0 p1 p2 _ _ _) = getAABB [p0, p1, p2]
 instance Shape Triangle where
     intersect ray (Triangle p0 p1 p2 n bV cV) = do
@@ -149,7 +146,6 @@ createMeshTriangle v0 v1 v2 = MeshTriangle v0 v1 v2 n betaVector gammaVector
 toTriangle :: MeshTriangle -> Triangle
 toTriangle (MeshTriangle (Vertex p0 _ _) (Vertex p1 _ _) (Vertex p2 _ _) n aV bV) = Triangle p0 p1 p2 n aV bV
 instance Boundable MeshTriangle where
-    type BoundedContent MeshTriangle = Shape
     boundingBox (MeshTriangle (Vertex p0 _ _) (Vertex p1 _ _) (Vertex p2 _ _) _ _ _) = getAABB [p0, p1, p2]
 instance Shape MeshTriangle where
     intersect ray (MeshTriangle (Vertex p0 t0 n0) (Vertex p1 t1 n1) (Vertex p2 t2 n2) n bV cV) = do

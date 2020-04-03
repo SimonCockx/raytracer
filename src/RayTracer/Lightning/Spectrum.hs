@@ -25,9 +25,9 @@ type Pixel = C.Pixel C.RGB C.Word8
 type Image = MIO.Image S C.RGB C.Word8
 type SpectralImage spec = A.Array D Ix2 spec
 
-
 class (VectorSpace a, Double ~ Scalar a, Eq a) => Spectrum a where
     toPixel :: a -> Pixel
+    fromPixel :: Pixel -> a
     (^*^) :: a -> a -> a
     white :: a
     black :: a
@@ -73,6 +73,7 @@ instance VectorSpace Gray where
     (*^) a = smap (a*)
 instance Spectrum Gray where
     toPixel (Gray x) = gray x
+    fromPixel (C.PixelRGB r g b) = Gray $ (fromIntegral r + fromIntegral g + fromIntegral b)/3/255
     white = Gray 1.0
     (^*^) = (*)
     smap f (Gray x) = Gray (f x)
@@ -91,6 +92,7 @@ instance VectorSpace RGB where
     (*^) a = smap (a*)
 instance Spectrum RGB where
     toPixel (RGB r g b) = rgb r g b
+    fromPixel (C.PixelRGB r g b) = RGB (fromIntegral r /255) (fromIntegral g /255) (fromIntegral b /255)
     white = RGB 1.0 1.0 1.0
     (RGB r1 g1 b1) ^*^ (RGB r2 g2 b2) = RGB (r1 * r2) (g1 * g2) (b1 * b2)
     smap f (RGB r g b) = RGB (f r) (f g) (f b)

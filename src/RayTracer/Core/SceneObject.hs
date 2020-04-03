@@ -1,8 +1,9 @@
 {-# OPTIONS_GHC -w #-}
 
 module RayTracer.Core.SceneObject
-    ( SceneObject_ (..)
+    ( Object (..)
     , SceneObject (..)
+    , BoundedObjectNode (..)
     , Surface (..)
     , WhiteShape (..)
     , simpleObject
@@ -16,155 +17,192 @@ import Data.Maybe
 import Data.List hiding (intersect)
 
 
-class (Shape a, Boundable a, SceneObject_ s ~ BoundedContent a) => SceneObject_ s a where
-    findHit :: Ray Double -> a -> Maybe (s, BRDF s, Intersection)
+class (Shape a) => Object a s where
+    findHit :: Ray Double -> a -> Maybe (Hit s)
+    default findHit :: (Material a s) => Ray Double -> a -> Maybe (Hit s)
+    findHit ray object = do
+        intersection <- intersect ray object
+        return $ inspect object ray intersection
+    boundedObjectNode :: a -> BoundedObjectNode s
+    default boundedObjectNode :: (Material a s) => a -> BoundedObjectNode s
+    boundedObjectNode object = MaterialNode object $ boundedNode object
 
 
-data SceneObject s = forall a. (SceneObject_ s a, Show a) => SceneObject a
+
+data SceneObject s = forall a. (Object a s) => SceneObject a
+                   | forall l. (Shape l, LightSource l s) => SceneLight l
 
 instance Show (SceneObject s) where
     show (SceneObject obj) = "SceneObject (" ++ show obj ++ ")"
+    show (SceneLight obj) = "SceneLight (" ++ show obj ++ ")"
 instance Boundable (SceneObject s) where
-    type BoundedContent (SceneObject s) = SceneObject_ s
     boundingBox (SceneObject obj) = boundingBox obj
-    boundingVolume (SceneObject obj) = boundingVolume obj
+    boundingBox (SceneLight obj) = boundingBox obj
 instance Shape (SceneObject s) where
     intersect ray (SceneObject obj) = intersect ray obj
+    intersect ray (SceneLight obj) = intersect ray obj
     numberOfIntersectionTests ray (SceneObject obj) = numberOfIntersectionTests ray obj
-instance (s1 ~ s2) => SceneObject_ s2 (SceneObject s1) where
-    findHit ray (SceneObject surface) = findHit ray surface
+    numberOfIntersectionTests ray (SceneLight obj) = numberOfIntersectionTests ray obj
+    boundedNode (SceneObject obj) = boundedNode obj
+    boundedNode (SceneLight obj) = boundedNode obj
+instance (s1 ~ s2) => Object (SceneObject s1) s2 where
+    findHit ray (SceneObject obj) = findHit ray obj
+    findHit ray (SceneLight light) = do
+        intersection <- intersect ray light
+        return $ inspect (Light light) ray intersection
+    boundedObjectNode (SceneObject obj) = boundedObjectNode obj
+    boundedObjectNode (SceneLight light) = MaterialNode (Light light) $ boundedNode light
 
 
-
-closestHit :: Maybe (s, BRDF s, Intersection) -> Maybe (s, BRDF s, Intersection) -> Maybe (s, BRDF s, Intersection)
-closestHit = closest (\(_, _, (t, _, _)) -> t)
-instance (SceneObject_ s obj) => SceneObject_ s [obj] where
+closestHit :: Maybe (Hit s) -> Maybe (Hit s) -> Maybe (Hit s)
+closestHit = closest (\(Hit _ _ (t, _, _)) -> t)
+instance (Object obj s) => Object [obj] s where
     findHit ray = foldr (closestHit . findHit ray) Nothing
+    boundedObjectNode [] = ObjectBranchNode (boundingBox ([] :: [AABB])) []
+    boundedObjectNode objects = splitBoundingObjects (boundingBox bvs) bvs
+        where
+            bvs = map boundedObjectNode objects
+
+splitBoundingObjects :: AABB -> [BoundedObjectNode s] -> BoundedObjectNode s
+splitBoundingObjects _ [bv] = bv
+splitBoundingObjects box bvs
+    | areaX <= areaY && areaX <= areaZ = ObjectBranchNode box [splitBoundingObjects leftBoxX leftX, splitBoundingObjects rightBoxX rightX]
+    | areaY <= areaZ                   = ObjectBranchNode box [splitBoundingObjects leftBoxY leftY, splitBoundingObjects rightBoxY rightY]
+    | otherwise                        = ObjectBranchNode box [splitBoundingObjects leftBoxZ leftZ, splitBoundingObjects rightBoxZ rightZ]
+    where
+        middle = (length bvs + 1) `div` 2
+        getGroups projection = splitAt middle $ sortOn (\bv -> projection $ centroid $ boundingBox $ bv) bvs
+        (leftX, rightX) = getGroups (\(Point x _ _) -> x)
+        (leftBoxX, rightBoxX) = (boundingBox leftX, boundingBox rightX)
+        areaX = getArea leftBoxX + getArea rightBoxX
+        (leftY, rightY) = getGroups (\(Point _ y _) -> y)
+        (leftBoxY, rightBoxY) = (boundingBox leftY, boundingBox rightY)
+        areaY = getArea leftBoxY + getArea rightBoxY
+        (leftZ, rightZ) = getGroups (\(Point _ _ z) -> z)
+        (leftBoxZ, rightBoxZ) = (boundingBox leftZ, boundingBox rightZ)
+        areaZ = getArea leftBoxZ + getArea rightBoxZ
 
 
-data Surface s a = Surface a (Material s)
+data Surface a s = forall m. (Material m s, Show m) => Surface a m
 
-instance (Show a) => Show (Surface s a) where
-    show (Surface shape _) = "Surface (" ++ show shape ++ ")"
-instance (Shape a, Boundable a, Shape ~ BoundedContent a, Spectrum s) => Boundable (Surface s a) where
-    type BoundedContent (Surface s a) = SceneObject_ s
+instance (Show a) => Show (Surface a s) where
+    show (Surface shape material) = "Surface (" ++ show shape ++ ") (" ++ show material ++ ")"
+instance (Boundable a) => Boundable (Surface a s) where
     boundingBox (Surface shape _) = boundingBox shape
-    boundingVolume surface@(Surface shape _) = SubtreeNode surface $ boundingVolume shape
-instance (Shape a) => Shape (Surface s a) where
+instance (Shape a) => Shape (Surface a s) where
     intersect ray (Surface shape _) = intersect ray shape
     numberOfIntersectionTests ray (Surface shape _) = numberOfIntersectionTests ray shape
-instance (Shape a, Boundable a, Shape ~ BoundedContent a, Spectrum s1, s1 ~ s2) => SceneObject_ s2 (Surface s1 a) where
-    findHit ray (Surface shape getBRDF) = do
-        intersection@(_, _, uvw) <- intersect ray shape
-        return (black, getBRDF uvw, intersection)
-instance (Transformable a b) => Transformable (Surface s a) b where
+    boundedNode (Surface shape _) = boundedNode shape
+instance (s1 ~ s2) => Material (Surface a s1) s2 where
+    inspect (Surface _ material) = inspect material
+instance (Shape a, Spectrum s1, s1 ~ s2) => Object (Surface a s1) s2 where
+instance (Transformable a b) => Transformable (Surface a s) b where
     transform t (Surface shape brdf) = Surface (t `transform` shape) brdf
 
 
-instance Boundable (Light s) where
-    type BoundedContent (Light s) = SceneObject_ s
-    boundingBox (Light l) = boundingBox l
-    boundingVolume light@(Light l) = SubtreeNode light $ boundingVolume l
-instance (Spectrum s1, s1 ~ s2) => SceneObject_ s2 (Light s1) where
-    findHit ray (Light l) = do
-        intersection@(t, _, _) <- intersect ray l
-        return (getRadiance l (follow ray t) (origin ray), blackBRDF, intersection)
 
-
-newtype WhiteShape s a = WhiteShape a
+newtype WhiteShape a s = WhiteShape a
     deriving (Show)
-deriving instance (Shape a) => Shape (WhiteShape s a)
-instance (Shape a, Boundable a, Shape ~ BoundedContent a, Spectrum s) => Boundable (WhiteShape s a) where
-    type BoundedContent (WhiteShape s a) = SceneObject_ s
-    boundingBox (WhiteShape shape) = boundingBox shape
-    boundingVolume whiteShape@(WhiteShape shape) = SubtreeNode whiteShape $ boundingVolume shape
-instance (Spectrum s1, s1 ~ s2, Shape a, Boundable a, Shape ~ BoundedContent a) => SceneObject_ s2 (WhiteShape s1 a) where
-    findHit ray (WhiteShape shape) = do
-        intersection <- intersect ray shape
-        return (black, whiteBRDF, intersection)
+deriving instance (Boundable a) => Boundable (WhiteShape a s)
+deriving instance (Shape a) => Shape (WhiteShape a s)
+instance (Spectrum s1, s1 ~ s2) => Material (WhiteShape a s1) s2 where
+    inspect _ _ = uniform $ diffuseBRDF white
+instance (Spectrum s1, s1 ~ s2, Shape a) => Object (WhiteShape a s1) s2 where
 
 
-simpleObject :: (Shape a, Boundable a, Shape ~ BoundedContent a, Spectrum s) => a -> SceneObject s
+simpleObject :: (Shape a, Show s, Spectrum s) => a -> SceneObject s
 simpleObject = SceneObject . WhiteShape
 
-withMaterial :: (Shape a, Boundable a, Shape ~ BoundedContent a, Spectrum s) => a -> Material s -> SceneObject s
+withMaterial :: (Material m s, Show m, Shape a, Spectrum s) => a -> m -> SceneObject s
 withMaterial shape = SceneObject . Surface shape
 
 
-instance (SceneObject_ s a) => SceneObject_ s (Transformed a) where
+instance (Object a s) => Object (Transformed a) s where
     findHit ray (Transformed m obj) = do
-        (spec, brdf, (t, n, uvw)) <- findHit (inverseTransform m ray) obj
-        return (spec, brdf, (t, normalTransform m n, uvw))
--- data BoundingObject s = BoundingObject AABB [BoundingObject s]
---                       | forall a. (SceneObject_ a s, Shape a, Show a) => BoundedObject AABB a
---                       | TransformedBoundingObject AABB (Transformation Double) (BoundingObject s)
--- instance Show (BoundingObject s) where
---     show (BoundingObject box innerVolumes) = "BoundingObject (" ++ show box ++ ") " ++ show innerVolumes
---     show (BoundedObject box obj) = "BoundedObject (" ++ show box ++ ") (" ++ show obj ++ ")"
---     show (TransformedBoundingObject box t volume) = "TransformedBoundingObject (" ++ show box ++ ") (" ++ show t ++ ") (" ++ show volume ++ ")" 
--- instance Shape (BoundingObject s) where
---     intersect ray volume = intersect ray $ boundingVolume volume
---     boundingBox volume = boundingBox $ boundingVolume volume
---     boundingVolume (BoundingObject box innerVolumes) = BoundingVolume box $ map boundingVolume innerVolumes
---     boundingVolume (BoundedObject box obj) = Bounded box obj
---     boundingVolume (TransformedBoundingObject box t obj) = TransformedBoundingVolume box t $ boundingVolume obj
---     numberOfIntersectionTests ray volume = numberOfIntersectionTests ray $ boundingVolume volume
--- instance (s1 ~ s2) => SceneObject_ (BoundingObject s1) s2 where
---     findHit ray obj = case intersect ray $ boundingBox obj of
---         Nothing -> Nothing
---         Just _  -> innerHit ray obj
+        Hit spec brdf (t, n, uvw) <- findHit (inverseTransform m ray) obj
+        return $ Hit spec (\w1 w2 -> brdf (transform m w1) (transform m w2)) (t, normalTransform m n, uvw)
+    boundedObjectNode (Transformed tr obj) = TransformedObjectNode box tr innerNode
+        where
+            innerNode = boundedObjectNode obj
+            AABB (Point minx miny minz) (Point maxx maxy maxz) _ = boundingBox innerNode
+            box = getAABB $ map (transform tr) [ Point minx miny minz, Point minx miny maxz
+                                               , Point minx maxy minz, Point minx maxy maxz
+                                               , Point maxx miny minz, Point maxx miny maxz
+                                               , Point maxx maxy minz, Point maxx maxy maxz]
 
-
-instance Shape (BoundedNode (SceneObject_ s)) where
+data BoundedObjectNode s = ObjectBranchNode AABB [BoundedObjectNode s]
+                         | forall m. (Material m s, Show m) => MaterialNode m BoundedShapeNode
+                         | TransformedObjectNode AABB (Transformation Double) (BoundedObjectNode s)
+instance Show (BoundedObjectNode s) where
+    show (ObjectBranchNode box branches) = "ObjectBranchNode (" ++ show box ++ ") " ++ show branches
+    show (MaterialNode obj shapeNode) = "MaterialNode (" ++ show obj ++ ") (" ++ show shapeNode ++ ")"
+    show (TransformedObjectNode box tr node) = "TransformedObjectNode (" ++ show box ++ ") (" ++ show tr ++ ") (" ++ show node ++ ")"
+instance Boundable (BoundedObjectNode s) where
+    boundingBox (ObjectBranchNode box _) = box
+    boundingBox (MaterialNode _ shapeNode) = boundingBox shapeNode
+    boundingBox (TransformedObjectNode box _ _) = box
+instance Shape (BoundedObjectNode s) where
     intersect ray volume = case intersect ray $ boundingBox volume of
         Nothing -> Nothing
-        Just _  -> innerIntersect ray volume
+        Just intersection -> innerObjectIntersect ray intersection volume
     numberOfIntersectionTests ray volume = numberOfIntersectionTests ray (boundingBox volume) + case intersect ray $ boundingBox volume of
         Nothing -> 0
-        Just _  -> innerNumberOfIntersectionTests ray volume
-instance SceneObject_ s (BoundedNode (SceneObject_ s)) where
+        Just _  -> innerNumberOfObjectIntersectionTests ray volume
+    boundedNode (ObjectBranchNode box innerNodes) = ShapeBranchNode box $ map boundedNode innerNodes
+    boundedNode (MaterialNode _ shapeNode) = shapeNode
+    boundedNode (TransformedObjectNode box tr innerNode) = TransformedShapeNode box tr $ boundedNode innerNode
+instance (s1 ~ s2) => Object (BoundedObjectNode s1) s2 where
     findHit ray node = case intersect ray $ boundingBox node of
         Nothing -> Nothing
-        Just _  -> innerHit ray node
+        Just outer  -> innerHit ray outer node
+    boundedObjectNode = id
 
-innerIntersect :: Ray Double -> BoundedNode (SceneObject_ s) -> Maybe Intersection
-innerIntersect ray (BoundedNode _ innerShape) = intersect ray innerShape
-innerIntersect ray (TransformedBoundedNode _ m innerShape) = do
-    (t, n, uvw) <- innerIntersect (inverseTransform m ray) innerShape
+
+innerObjectIntersect :: Ray Double -> Intersection -> BoundedObjectNode s -> Maybe Intersection
+innerObjectIntersect ray outer (MaterialNode _ innerShape) = innerIntersect ray outer innerShape
+innerObjectIntersect ray _ (TransformedObjectNode _ m innerNode) = do
+    (t, n, uvw) <- intersect (inverseTransform m ray) innerNode
     return (t, normalTransform m n, uvw)
-innerIntersect ray (BoxNode _ innerVolumes) = intersectVts volumesTs
+innerObjectIntersect ray _ (ObjectBranchNode _ innerVolumes) = intersectVts volumesTs
     where
-        volumesTs = sortOn fst
-                  $ mapMaybe (\innerVolume -> fmap (\(t, _, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
+        getT ((t, _, _), _) = t
+        volumesTs = sortOn getT
+                  $ mapMaybe (\innerVolume -> fmap (, innerVolume) $ intersect ray $ boundingBox innerVolume) innerVolumes
+        test vts t = takeWhile ((<t) . getT) vts
         intersectVts [] = Nothing
-        intersectVts ((_, innerVolume):vts) = case innerIntersect ray innerVolume of
+        intersectVts ((outer, innerVolume):vts) = case innerObjectIntersect ray outer innerVolume of
             Nothing     -> intersectVts vts
-            Just (t, n, uvw) -> foldr (closestIntersection . innerIntersect ray . snd) (Just (t, n, uvw)) $ takeWhile ((<t) . fst) vts
+            Just intersection@(t, n, uvw) -> foldr (closestIntersection . uncurry (innerObjectIntersect ray)) (Just intersection) $ takeWhile ((<t) . getT) vts
 
-innerNumberOfIntersectionTests :: Ray Double -> BoundedNode (SceneObject_ s) -> Int
-innerNumberOfIntersectionTests ray (BoundedNode _ innerShape) = numberOfIntersectionTests ray innerShape
-innerNumberOfIntersectionTests ray (TransformedBoundedNode _ m innerShape) =
+innerNumberOfObjectIntersectionTests :: Ray Double -> BoundedObjectNode s -> Int
+innerNumberOfObjectIntersectionTests ray (MaterialNode _ innerShape) = innerNumberOfIntersectionTests ray innerShape
+innerNumberOfObjectIntersectionTests ray (TransformedObjectNode _ m innerShape) =
     numberOfIntersectionTests (inverseTransform m ray) innerShape
-innerNumberOfIntersectionTests ray (BoxNode _ innerVolumes) = length innerVolumes + nrOfIntersectVts volumesTs
+innerNumberOfObjectIntersectionTests ray (ObjectBranchNode _ innerVolumes) = (sum $ map (numberOfIntersectionTests ray . boundingBox) innerVolumes) + nrOfIntersectVts volumesTs
     where
-        volumesTs = sortOn fst
-                  $ mapMaybe (\innerVolume -> fmap (\(t, _, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
+        getT ((t, _, _), _) = t
+        volumesTs = sortOn getT
+                  $ mapMaybe (\innerVolume -> fmap (, innerVolume) $ intersect ray $ boundingBox innerVolume) innerVolumes
         nrOfIntersectVts [] = 0
-        nrOfIntersectVts ((_, innerVolume):vts) = innerNumberOfIntersectionTests ray innerVolume + case innerIntersect ray innerVolume of
+        nrOfIntersectVts ((outer, innerVolume):vts) = innerNumberOfObjectIntersectionTests ray innerVolume + case innerObjectIntersect ray outer innerVolume of
             Nothing     -> nrOfIntersectVts vts
-            Just (t, _, _) -> sum $ map (innerNumberOfIntersectionTests ray . snd) $ takeWhile ((<t) . fst) vts
+            Just (t, _, _) -> sum $ map (innerNumberOfObjectIntersectionTests ray . snd) $ takeWhile ((<t) . getT) vts
 
-innerHit :: Ray Double -> BoundedNode (SceneObject_ s) -> Maybe (s, BRDF s, Intersection)
-innerHit ray (BoundedNode _ innerObj) = findHit ray innerObj
-innerHit ray (TransformedBoundedNode _ m innerObj) = do
-    (spec, brdf, (t, n, uvw)) <- innerHit (inverseTransform m ray) innerObj
-    return (spec, brdf, (t, normalTransform m n, uvw))
-innerHit ray (BoxNode _ innerVolumes) = intersectVts volumesTs
+
+innerHit :: Ray Double -> Intersection -> BoundedObjectNode s -> Maybe (Hit s)
+innerHit ray outer (MaterialNode material shapeNode) = do
+    intersection <- innerIntersect ray outer shapeNode
+    return $ inspect material ray intersection
+innerHit ray _ (TransformedObjectNode _ m innerObj) = do
+    Hit spec brdf (t, n, uvw) <- findHit (inverseTransform m ray) innerObj
+    return $ Hit spec (\w1 w2 -> brdf (transform m w1) (transform m w2)) (t, normalTransform m n, uvw)
+innerHit ray _ (ObjectBranchNode _ innerVolumes) = intersectVts volumesTs
     where
-        volumesTs = sortOn fst
-                  $ mapMaybe (\innerVolume -> fmap (\(t, _, _) -> (t, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
+        getT ((t, _, _), _) = t
+        volumesTs = sortOn getT
+                  $ mapMaybe (\innerVolume -> fmap (\outer@(t, _, _) -> (outer, innerVolume)) $ intersect ray $ boundingBox innerVolume) innerVolumes
         intersectVts [] = Nothing
-        intersectVts ((_, innerVolume):vts) = case innerHit ray innerVolume of
+        intersectVts ((outer, innerVolume):vts) = case innerHit ray outer innerVolume of
             Nothing     -> intersectVts vts
-            Just (spec, brdf, (t, n, uvw)) -> foldr (closestHit . innerHit ray . snd) (Just (spec, brdf, (t, n, uvw))) $ takeWhile ((<t) . fst) vts
-innerHit ray (BoundedRootNode)
+            Just hit@(Hit _ _ (t, _, _)) -> foldr (closestHit . uncurry (innerHit ray)) (Just hit) $ takeWhile ((<t) . getT) vts
+

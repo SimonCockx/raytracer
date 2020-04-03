@@ -11,9 +11,10 @@ import RayTracer.Random
 import RayTracer.Geometry
 import RayTracer.Core.Sampling
 import RayTracer.Lightning.Spectrum
+import RayTracer.Lightning.Material
 
 
-class (Shape a, Spectrum s) => LightSource a s where
+class (Spectrum s) => LightSource a s where
     -- | Get the radiance caused by a light source at a specific point.
     getRadiance :: a            -- ^ The light source.
                 -> Point Double -- ^ A point on the light source.
@@ -22,19 +23,15 @@ class (Shape a, Spectrum s) => LightSource a s where
     
     generateSample :: (MonadRandom m) => SamplingStrategy -> a -> Point Double -> m [(Point Double, s)]
 
-data Light s = forall a. (LightSource a s, Boundable a, Shape ~ BoundedContent a, Show a) => Light a
+data Light s = forall a. (LightSource a s, Show a) => Light a
 
 instance Show (Light s) where
     show (Light l) = show l
--- instance Boundable (Light s) where
---     type BoundedContent (Light s) = Shape
---     boundingBox (Light l) = boundingBox l
---     boundingVolume (Light l) = boundingVolume l
-instance Shape (Light s) where
-    intersect ray (Light l) = intersect ray l
-instance (Spectrum s, Spectrum a, s ~ a) => LightSource (Light s) a where
+instance (Spectrum s1, s1 ~ s2) => LightSource (Light s1) s2 where
     getRadiance (Light l) = getRadiance l
     generateSample strat (Light l) = generateSample strat l
+instance (Spectrum s1, s1 ~ s2) => Material (Light s1) s2 where
+    inspect l ray intersection@(t, _, _) = Hit (getRadiance l (follow ray t) (origin ray)) blackBRDF intersection
 
 
 instance (LightSource l s) => LightSource (Transformed l) s where
@@ -46,12 +43,7 @@ instance (LightSource l s) => LightSource (Transformed l) s where
 
 data AmbientLight s = AmbientLight s
     deriving (Show)
-instance (Show s) => Boundable (AmbientLight s) where
-    type BoundedContent (AmbientLight s) = Shape
-    boundingBox _ = createAABB (pure 1) (pure (-1))
-instance (Show s) => Shape (AmbientLight s) where
-    intersect _ _ = Nothing
-instance (Spectrum s1, Show s1, s1 ~ s2) => LightSource (AmbientLight s1) s2 where
+instance (Spectrum s1, s1 ~ s2) => LightSource (AmbientLight s1) s2 where
     getRadiance (AmbientLight spectrum) _ _ = spectrum
     generateSample _ (AmbientLight spectrum) point = return [(point, spectrum)]
 
@@ -64,12 +56,7 @@ data PointLight s
         s              -- ^ The radiance of the light at distance 1.
     deriving (Show)
 
-instance (Show s) => Boundable (PointLight s) where
-    type BoundedContent (PointLight s) = Shape
-    boundingBox _ = createAABB (pure 1) (pure (-1))
-instance (Show s) => Shape (PointLight s) where
-    intersect _ _ = Nothing
-instance (Show s1, Spectrum s1, s1 ~ s2) => LightSource (PointLight s1) s2 where
+instance (Spectrum s1, s1 ~ s2) => LightSource (PointLight s1) s2 where
     getRadiance (PointLight center spectrum) _ other = spectrum ^/ (normSqr $ other <-> center)
     generateSample _ light@(PointLight center _) point = return [(center, getRadiance light center point)]
 
@@ -82,12 +69,7 @@ data LongRangePointLight s
         s              -- ^ The radiance of the light at distance 1.
     deriving (Show)
 
-instance (Show s) => Boundable (LongRangePointLight s) where
-    type BoundedContent (LongRangePointLight s) = Shape
-    boundingBox _ = createAABB (pure 1) (pure (-1))
-instance (Show s) => Shape (LongRangePointLight s) where
-    intersect _ _ = Nothing
-instance (Show s1, Spectrum s1, s1 ~ s2) => LightSource (LongRangePointLight s1) s2 where
+instance (Spectrum s1, s1 ~ s2) => LightSource (LongRangePointLight s1) s2 where
     getRadiance (LongRangePointLight center spectrum) _ other = spectrum ^/ (norm $ other <-> center)
     generateSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light center point)]
 
@@ -95,8 +77,7 @@ instance (Show s1, Spectrum s1, s1 ~ s2) => LightSource (LongRangePointLight s1)
 data AreaLight s = AreaLight Double Double s
     deriving (Show)
 
-instance (Show s) => Boundable (AreaLight s) where
-    type BoundedContent (AreaLight s) = Shape
+instance Boundable (AreaLight s) where
     boundingBox (AreaLight width height _) = createAABB (Point (-width/2) 0 (-height/2)) (Point (width/2) 0 (height/2))
 instance (Show s) => Shape (AreaLight s) where
     intersect ray (AreaLight width height _)
@@ -116,7 +97,7 @@ getRadianceDividedByDistSqr (AreaLight width height spec) pl pt = spec ^* (width
             distSqr = normSqr dp
             d = dp ^/ (sqrt distSqr)
             Vector _ y _ = d
-instance (Show s1, Spectrum s1, s1 ~ s2) => LightSource (AreaLight s1) s2 where
+instance (Spectrum s1, s1 ~ s2) => LightSource (AreaLight s1) s2 where
     getRadiance (AreaLight width height spec) pl pt = spec ^* (width * height * (abs y))
         where
             dp = pt <-> pl

@@ -89,7 +89,7 @@ instance (Spectrum s) => RayTracer DiffuseRayTracer s where
     traceRay _ world ray = do
         pixel <- case findHit ray $ objects world of
                  Nothing -> return black
-                 Just (s, brdf, (_, n, _)) -> do
+                 Just (Hit s brdf (_, n, _)) -> do
                      let l_out = negateV $ direction ray
                      return $ max 0 (l_out <.> n) *^ (brdf l_out l_out ^+^ s)
         return $ toRGB $ gammaCorrect pixel
@@ -127,9 +127,9 @@ instance (Spectrum s) => RayTracer SpectrumIndependentRayTracer s where
     traceRay (SpectrumIndependentRayTracer strat) world ray = do
         pixel <- case findHit ray $ objects world of
                  Nothing -> return black
-                 Just (le, brd, (t, n, _)) -> do
+                 Just (Hit le brdf (t, n, _)) -> do
                      let p  = shadowPoint (follow ray t) n
                      samples <- mapM (\light -> generateSample strat light p) $ lights world
-                     return $ foldr ((^+^) . (\sample -> filterRadianceSample sample world ray brd p n)) le samples
+                     return $ foldr ((^+^) . (\sample -> filterRadianceSample sample world ray brdf p n)) le samples
         return $ toRGB $ gammaCorrect pixel
 

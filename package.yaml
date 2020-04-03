@@ -23,6 +23,7 @@ dependencies:
 - base >= 4.7 && < 5
 - massiv
 - massiv-io
+- colour
 - split
 - safe
 - vector-space
@@ -33,6 +34,8 @@ dependencies:
 - MonadRandom
 - scheduler
 - unordered-containers
+- cassava
+- bytestring
 # benchmarks
 - criterion
 # tests
@@ -50,6 +53,8 @@ default-extensions:
 - DefaultSignatures
 - StandaloneDeriving
 - GeneralizedNewtypeDeriving
+- TupleSections
+- MultiWayIf
 
 library:
   source-dirs: src
