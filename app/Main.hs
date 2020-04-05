@@ -13,7 +13,7 @@ import Scenes
 
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 400 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 3)
+camera = createPerspectiveCamera 50 30 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 3)
 
 createScene :: IO (Scene RGB)
 createScene = do
@@ -41,7 +41,7 @@ createScene = do
                       ]
     return $ Scene (insertBoundingBoxes world) camera
 
-rayTracer = SpectrumIndependentRayTracer $ Random 10
+rayTracer = SpectrumIndependentRayTracer $ RegularGrid 3
 
 renderFast :: (Spectrum s) => IO (Scene s) -> IO Image
 renderFast getScene = do
@@ -131,10 +131,9 @@ displayBHVLayers depth name scene = mapM_ (\n -> do
 
 main :: IO ()
 main = do
-    let getScene = processScene insertBoundingBoxes <$> shapeScene
+    let getScene = processScene insertBoundingBoxes <$> softShadowScene
     -- getScene >>= print
     -- (show <$> getScene) >>= writeFile "test.txt"
-    -- image <- justRender getScene
-    -- saveAs "test" image
-    -- display image
-    displayBHVLayers 10 "BHV-final-test" getScene
+    image <- justRender getScene
+    saveAs "test" image
+    display image

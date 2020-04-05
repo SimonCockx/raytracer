@@ -8,12 +8,17 @@ module RayTracer.Geometry.Shape
     , closestIntersection
     , innerIntersect
     , innerNumberOfIntersectionTests
+    , AABB (minimumPoint, maximumPoint, centroid)
+    , pattern AABB
+    , createAABB
+    , getArea
+    , getAABB
+    , getEnclosingAABB
     ) where
 
 import RayTracer.Geometry.Vector
 import RayTracer.Geometry.Ray
 import RayTracer.Geometry.Transformation
-import RayTracer.Geometry.Bounded
 
 import Data.Maybe
 import Data.List hiding (intersect)
@@ -36,67 +41,74 @@ closestIntersection = closest $ \(t, _, _) -> t
 {-# INLINE closestIntersection #-}
 
 -- | A class representing a shape that can be intersected by a ray.
-class (Boundable a, Show a) => Shape a where
+class (Show a) => Shape a where
     -- | Compute the closest intersection of a ray with this shape, if any.
     intersect :: Ray Double -> a -> Maybe Intersection
     numberOfIntersectionTests :: Ray Double -> a -> Int
     numberOfIntersectionTests _ _ = 1
+    boundingBox :: a -> AABB
     boundedNode :: a -> BoundedShapeNode
     boundedNode shape = ShapeNode (boundingBox shape) shape
 
+instance Shape () where
+    intersect ray () = Nothing
+    numberOfIntersectionTests ray () = 0
+    boundingBox () = createAABB (pure 1) (pure (-1))
+    boundedNode = UnboundedNode
 
 data BoundedShapeNode = ShapeBranchNode AABB [BoundedShapeNode]
                       | forall a. (Shape a, Show a) => ShapeNode AABB a
-                      | BoxNode AABB
+                      | forall a. (Shape a, Show a) => UnboundedNode a
                       | TransformedShapeNode AABB (Transformation Double) BoundedShapeNode
 instance Show BoundedShapeNode where
     show (ShapeBranchNode box branches) = "ShapeBranchNode (" ++ show box ++ ") " ++ show branches
     show (ShapeNode box shape) = "ShapeNode (" ++ show box ++ ") (" ++ show shape ++ ")"
-    show (BoxNode box) = "BoxNode (" ++ show box ++ ")"
+    show (UnboundedNode shape) = "UnboundedNode (" ++ show shape ++ ")"
     show (TransformedShapeNode box tr node) = "TransformedShapeNode (" ++ show box ++ ") (" ++ show tr ++ ") (" ++ show node ++ ")"
-instance Boundable BoundedShapeNode where
-    boundingBox (ShapeBranchNode box _) = box
-    boundingBox (ShapeNode box _) = box
-    boundingBox (BoxNode box) = box
-    boundingBox (TransformedShapeNode box _ _) = box
 instance Shape BoundedShapeNode where
+    intersect ray (UnboundedNode shape) = intersect ray shape
     intersect ray volume = case intersect ray $ boundingBox volume of
         Nothing -> Nothing
-        Just intersection -> innerIntersect ray intersection volume
+        Just _  -> innerIntersect ray volume
+    numberOfIntersectionTests ray (UnboundedNode shape) = numberOfIntersectionTests ray shape
     numberOfIntersectionTests ray volume = numberOfIntersectionTests ray (boundingBox volume) + case intersect ray $ boundingBox volume of
         Nothing -> 0
         Just _  -> innerNumberOfIntersectionTests ray volume
+    boundingBox (ShapeBranchNode box _) = box
+    boundingBox (ShapeNode box _) = box
+    boundingBox (UnboundedNode box) = AABBox (pure (-1/0)) (pure (1/0)) (pure 0)
+    boundingBox (TransformedShapeNode box _ _) = box
     boundedNode = id
 
-innerIntersect :: Ray Double -> Intersection -> BoundedShapeNode -> Maybe Intersection
-innerIntersect ray _ (ShapeNode _ innerShape) = intersect ray innerShape
-innerIntersect ray _ (TransformedShapeNode _ m innerNode) = do
+innerIntersect :: Ray Double -> BoundedShapeNode -> Maybe Intersection
+innerIntersect ray (ShapeNode _ innerShape) = intersect ray innerShape
+innerIntersect ray (TransformedShapeNode _ m innerNode) = do
     (t, n, uvw) <- intersect (inverseTransform m ray) innerNode
     return (t, normalTransform m n, uvw)
-innerIntersect ray outerIntersection (BoxNode _) = return outerIntersection
-innerIntersect ray _ (ShapeBranchNode _ innerVolumes) = intersectVts volumesTs
+innerIntersect ray (UnboundedNode shape) = intersect ray shape
+innerIntersect ray (ShapeBranchNode _ innerVolumes) = intersectVts volumesTs
     where
         getT ((t, _, _), _) = t
         volumesTs = sortOn getT
                   $ mapMaybe (\innerVolume -> fmap (, innerVolume) $ intersect ray $ boundingBox innerVolume) innerVolumes
         test vts t = takeWhile ((<t) . getT) vts
         intersectVts [] = Nothing
-        intersectVts ((outer, innerVolume):vts) = case innerIntersect ray outer innerVolume of
+        intersectVts ((_, innerVolume):vts) = case innerIntersect ray innerVolume of
             Nothing     -> intersectVts vts
-            Just intersection@(t, n, uvw) -> foldr (closestIntersection . uncurry (innerIntersect ray)) (Just intersection) $ takeWhile ((<t) . getT) vts
+            Just intersection@(t, n, uvw) -> foldr (\vt acc -> closestIntersection acc $ innerIntersect ray $ snd vt) (Just intersection) $ takeWhile ((<t) . getT) vts
 
 innerNumberOfIntersectionTests :: Ray Double -> BoundedShapeNode -> Int
 innerNumberOfIntersectionTests ray (ShapeNode _ innerShape) = numberOfIntersectionTests ray innerShape
 innerNumberOfIntersectionTests ray (TransformedShapeNode _ m innerShape) =
     numberOfIntersectionTests (inverseTransform m ray) innerShape
-innerNumberOfIntersectionTests ray (BoxNode _) = 0
+innerNumberOfIntersectionTests ray (UnboundedNode shape) = numberOfIntersectionTests ray shape
 innerNumberOfIntersectionTests ray (ShapeBranchNode _ innerVolumes) = (sum $ map (numberOfIntersectionTests ray . boundingBox) innerVolumes) + nrOfIntersectVts volumesTs
     where
         getT ((t, _, _), _) = t
         volumesTs = sortOn getT
                   $ mapMaybe (\innerVolume -> fmap (, innerVolume) $ intersect ray $ boundingBox innerVolume) innerVolumes
         nrOfIntersectVts [] = 0
-        nrOfIntersectVts ((outer, innerVolume):vts) = innerNumberOfIntersectionTests ray innerVolume + case innerIntersect ray outer innerVolume of
+        nrOfIntersectVts ((_, innerVolume):vts) = innerNumberOfIntersectionTests ray innerVolume + case innerIntersect ray innerVolume of
             Nothing     -> nrOfIntersectVts vts
             Just (t, _, _) -> sum $ map (innerNumberOfIntersectionTests ray . snd) $ takeWhile ((<t) . getT) vts
 
@@ -104,6 +116,7 @@ innerNumberOfIntersectionTests ray (ShapeBranchNode _ innerVolumes) = (sum $ map
 instance (Shape a) => Shape [a] where
     intersect ray = foldr (closestIntersection . intersect ray) Nothing
     numberOfIntersectionTests ray = sum . map (numberOfIntersectionTests ray)
+    boundingBox boundables = getEnclosingAABB $ map boundingBox boundables
     boundedNode [] = ShapeBranchNode (boundingBox ([] :: [AABB])) []
     boundedNode shapes = splitBoundingVolumes (boundingBox bvs) bvs
         where
@@ -134,14 +147,41 @@ instance (Shape a) => Shape (Transformed a) where
         (t, n, uvw) <- intersect (inverseTransform m ray) s
         return (t, normalTransform m n, uvw)
     numberOfIntersectionTests ray (Transformed t shape) = numberOfIntersectionTests (inverseTransform t ray) shape
-    boundedNode (Transformed tr shape) = TransformedShapeNode box tr innerNode
+    boundingBox (Transformed t s) = getAABB points
+        where
+            AABB (Point minx miny minz) (Point maxx maxy maxz) _ = boundingBox s
+            points = map (transform t) [ Point minx miny minz, Point minx miny maxz
+                                       , Point minx maxy minz, Point minx maxy maxz
+                                       , Point maxx miny minz, Point maxx miny maxz
+                                       , Point maxx maxy minz, Point maxx maxy maxz ]
+    boundedNode ts@(Transformed tr shape) = TransformedShapeNode (boundingBox ts) tr innerNode
         where
             innerNode = boundedNode shape
-            AABB (Point minx miny minz) (Point maxx maxy maxz) _ = boundingBox innerNode
-            box = getAABB $ map (transform tr) [ Point minx miny minz, Point minx miny maxz
-                                               , Point minx maxy minz, Point minx maxy maxz
-                                               , Point maxx miny minz, Point maxx miny maxz
-                                               , Point maxx maxy minz, Point maxx maxy maxz]
+
+
+pattern AABB :: Point Double -> Point Double -> Point Double -> AABB
+pattern AABB minp maxp cent <- AABBox minp maxp cent
+
+data AABB = AABBox {minimumPoint :: Point Double, maximumPoint :: Point Double, centroid :: Point Double}
+    deriving (Show)
+createAABB :: Point Double -> Point Double -> AABB
+createAABB minP maxP = AABBox minP maxP $ minP <+^ (maxP <-> minP)^/2
+getArea :: AABB -> Double
+getArea (AABB minP maxP _) = 2*(dx*dy + dy*dz + dz*dx)
+    where
+        Vector dx dy dz = minP <-> maxP
+getAABB :: [Point Double] -> AABB
+getAABB [] = createAABB (pure 1) (pure (-1))
+getAABB points = createAABB minPoint maxPoint
+    where
+        minPoint = foldr1 (\(Point x y z) (Point minx miny minz) -> Point (min minx x) (min miny y) (min minz z)) points
+        maxPoint = foldr1 (\(Point x y z) (Point maxx maxy maxz) -> Point (max maxx x) (max maxy y) (max maxz z)) points
+getEnclosingAABB :: [AABB] -> AABB
+getEnclosingAABB [] = createAABB (pure 1) (pure (-1))
+getEnclosingAABB aabbs = createAABB minPoint maxPoint
+    where
+        minPoint = foldr1 (\(Point x y z) (Point minx miny minz) -> Point (min minx x) (min miny y) (min minz z)) $ map minimumPoint aabbs
+        maxPoint = foldr1 (\(Point x y z) (Point maxx maxy maxz) -> Point (max maxx x) (max maxy y) (max maxz z)) $ map maximumPoint aabbs
 
 
 instance Shape AABB where
@@ -169,4 +209,5 @@ instance Shape AABB where
             uvw = (/) `fmap` (follow ray tmin <-> c) <*> dp
             Point xo yo zo = origin ray
             Vector xd yd zd = direction ray
-    boundedNode box = BoxNode box
+    boundingBox = id
+    boundedNode = UnboundedNode

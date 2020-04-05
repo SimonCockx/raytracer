@@ -8,15 +8,15 @@ import RayTracer.Core
 import RayTracer.Geometry
 import RayTracer.Lightning
 
-import Data.Maybe (mapMaybe, maybeToList)
+import Data.Maybe (isJust, fromJust, mapMaybe)
 
 
 processScene :: (World s -> World a) -> Scene s -> Scene a
 processScene processWorld scene = scene {getWorld = processWorld $ getWorld scene}
 
 
-insertBoundingBoxes :: World s -> World s
-insertBoundingBoxes world = world {objects = [SceneObject $ boundedObjectNode world]}
+insertBoundingBoxes :: (Spectrum s) => World s -> World s
+insertBoundingBoxes world = World (boundedObjectNode world) $ worldLights world
 
 
 bvMaterial :: ProceduralDiffuseTexture RGB
@@ -33,11 +33,11 @@ bvMaterial = ProceduralDiffuseTexture tex
                                 abs (b - c) <= sqrt 2 * thickness)
 
 extractBVHLayer :: Int -> World s -> World RGB
-extractBVHLayer depth world = insertBoundingBoxes $ World (map SceneObject $ maybeToList boxes) []
+extractBVHLayer depth world = insertBoundingBoxes $ if isJust boxes then World (fromJust boxes) [] else World () []
     where
-        root = boundedObjectNode world
+        rootNode = boundedObjectNode world
         extractObjectBoxes :: Int -> BoundedObjectNode s -> Maybe (BoundedObjectNode RGB)
-        extractObjectBoxes 0 bvh = Just $ MaterialNode bvMaterial $ BoxNode $ boundingBox bvh
+        extractObjectBoxes 0 bvh = Just $ MaterialNode bvMaterial $ UnboundedNode $ boundingBox bvh
         extractObjectBoxes d bvh = case bvh of
             ObjectBranchNode box innerNodes -> case mapMaybe (extractObjectBoxes $ d-1) innerNodes of
                 []     -> Nothing
@@ -46,13 +46,13 @@ extractBVHLayer depth world = insertBoundingBoxes $ World (map SceneObject $ may
             MaterialNode _ shapeNode -> extractShapeBoxes d shapeNode
             TransformedObjectNode box tr objectNode -> TransformedObjectNode box tr <$> extractObjectBoxes (d-1) objectNode
         extractShapeBoxes :: Int -> BoundedShapeNode -> Maybe (BoundedObjectNode RGB)
-        extractShapeBoxes 0 bvh = Just $ MaterialNode bvMaterial $ BoxNode $ boundingBox bvh
+        extractShapeBoxes 0 bvh = Just $ MaterialNode bvMaterial $ UnboundedNode $ boundingBox bvh
         extractShapeBoxes d bvh = case bvh of
             ShapeBranchNode box innerNodes -> case mapMaybe (extractShapeBoxes $ d-1) innerNodes of
                 []     -> Nothing
                 [node] -> Just node
                 l      -> Just $ ObjectBranchNode box l
             ShapeNode box shape -> if d == 1 then Just $ MaterialNode whiteMaterial $ ShapeNode box shape else Nothing
-            BoxNode _ -> Nothing
+            UnboundedNode _ -> Nothing
             TransformedShapeNode box tr shapeNode -> TransformedObjectNode box tr <$> extractShapeBoxes (d-1) shapeNode
-        boxes = extractObjectBoxes depth root
+        boxes = extractObjectBoxes depth rootNode

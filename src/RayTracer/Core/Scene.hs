@@ -14,7 +14,7 @@ import RayTracer.Random
 -- | A type representing a scene of shapes.
 data Scene s = forall cam. (Camera cam, Show cam) => Scene {getWorld :: (World s), getCamera :: cam}
 
-instance (Show s) => Show (Scene s) where
+instance Show (Scene s) where
     show (Scene world cam) = "Scene (" ++ show world ++ ") (" ++ show cam ++ ")"
 
 render :: (RayTracer r s) => Gen -> r -> Scene s -> Image

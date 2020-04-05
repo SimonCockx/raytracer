@@ -28,7 +28,7 @@ class Material m s where
     inspect :: m -> Ray Double -> Intersection -> Hit s
 
 uniform :: (Spectrum s) => BRDF s -> Intersection -> Hit s
-uniform = Hit zeroV
+uniform = Hit black
 
 diffuseBRDF :: s -> BRDF s
 diffuseBRDF reflectance _ _ = reflectance
@@ -41,16 +41,12 @@ instance (Spectrum s1, s1 ~ s2) => Material (Diffuse s1) s2 where
 whiteBRDF :: (Spectrum s) => BRDF s
 whiteBRDF = diffuseBRDF white
 
--- whiteMaterial :: (Spectrum s) => Material s
--- whiteMaterial = uniform whiteBRDF
 whiteMaterial :: (Spectrum s) => Diffuse s
 whiteMaterial = Diffuse white
 
 blackBRDF :: (Spectrum s) => BRDF s
 blackBRDF = diffuseBRDF black
 
--- blackMaterial :: (Spectrum s) => Material s
--- blackMaterial = uniform blackBRDF
 blackMaterial :: (Spectrum s) => Diffuse s
 blackMaterial = Diffuse black
 
@@ -79,6 +75,3 @@ instance Show (ProceduralDiffuseTexture s) where
     show _ = "ProceduralDiffuseTexture"
 instance (Spectrum s1, s1 ~ s2) => Material (ProceduralDiffuseTexture s1) s2 where
     inspect (ProceduralDiffuseTexture toReflectance) _ intersection@(_, _, uvw) = uniform (diffuseBRDF $ toReflectance uvw) intersection
-
--- proceduralDiffuseTexture :: (Spectrum s) => (Vector Double -> s) -> Material s
--- proceduralDiffuseTexture toReflectance intersection@(_, _, uvw) = (zeroV, diffuseBRDF $ toReflectance uvw, intersection)

@@ -40,7 +40,7 @@ instance Foldable Vector where
 instance Traversable Vector where
     traverse f (Vector x y z) = fromList <$> traverse f [x, y, z]
         where
-            fromList [a, b, c] = Vector a b c
+            fromList [a, b, c] = Vector a b c -- TODO: kan dit beter?
             fromList _ = error "Not implemented..."
             {-# INLINE fromList #-}
     {-# INLINE traverse #-}

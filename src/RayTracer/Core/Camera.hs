@@ -13,7 +13,6 @@ import RayTracer.Core.RayTracer
 import RayTracer.Core.World
 import RayTracer.Core.Sampling
 import RayTracer.Lightning
-import qualified Data.HashMap.Strict as H
 
 -- | A class representing a camera that can generate a grid of rays.
 class Camera a where
@@ -68,50 +67,25 @@ createPerspectiveCamera xRes yRes orig lookAt up fov strategy
 
 
 -- | Generate the rays through this camera.
-generateRays :: (MonadRandom m) => PerspectiveCamera -> m (Array D Ix2 (m [Ray Double]))
-generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width height strategy) = case strategy of
-    RegularGrid n -> return $ makeArrayR D Par (Sz (yRes :. xRes)) generateCell
+generateRays :: (MonadRandom m) => PerspectiveCamera -> Array D Ix2 (m [Ray Double])
+generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width height strategy) =
+    makeArrayR D Par (Sz (yRes :. xRes)) generateCell
         where
-            generateCell (r :. c) = return $ map (uncurry generateRay) points
+            pixelWidth = width*invXRes
+            pixelHeight = height*invYRes
+            generateCell = (\(x, y) -> map (uncurry generateRay) <$> getSample strategy x y pixelWidth pixelHeight) . pixelCenter
+            pixelCenter (r :. c) = (centerX, centerY)
                 where
-                    cornerX = (fromIntegral c) - (fromIntegral xRes)/2
-                    cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
-                    offset = 1/(2*(fromIntegral n))
-                    points = [((cornerX + offset + ip)*invXRes, (cornerY - offset - jp)*invYRes) | i <- [0..(n-1)], j <- [0..(n-1)], let ip = (fromIntegral i) / (fromIntegral n), let jp = (fromIntegral j) / (fromIntegral n)]
-    Stratified n -> return $ makeArrayR D Par (Sz (yRes :. xRes)) generateCell
-        where
-            generateCell (r :. c) = fmap (fmap (uncurry generateRay)) $ replicateM n $ do
-                x <- getRandomR (cornerX, cornerX+1)
-                y <- getRandomR (cornerY-1, cornerY)
-                return (x*invXRes, y*invYRes)
+                    centerX = pixelWidth*((fromIntegral c) - (fromIntegral (xRes - 1))/2)
+                    centerY = pixelHeight*((fromIntegral (yRes - 1 - r)) - (fromIntegral (yRes - 1))/2)
+            generateRay uCoo vCoo = createRay orig direc
                 where
-                    cornerX = (fromIntegral c) - (fromIntegral xRes)/2
-                    cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
-    Random n -> do
-        indexMap <- fmap (H.fromListWith (+)) $ replicateM (ceiling $ fromIntegral (xRes * yRes) * n) $ do
-            r <- getRandomR (0, yRes-1)
-            c <- getRandomR (0, xRes-1)
-            return ((r, c), 1)
-        return $ makeArrayR D Par (Sz (yRes :. xRes)) (\(r :. c) -> generateCell ((r, c), H.lookupDefault 0 (r, c) indexMap))
-        where
-            generateCell ((r, c), count) = fmap (fmap (uncurry generateRay)) $ replicateM count $ do
-                x <- getRandomR (cornerX, cornerX+1)
-                y <- getRandomR (cornerY-1, cornerY)
-                return (x*invXRes, y*invYRes)
-                where
-                    cornerX = (fromIntegral c) - (fromIntegral xRes)/2
-                    cornerY = (fromIntegral (yRes - r)) - (fromIntegral yRes)/2
-    where
-        generateRay x y = createRay orig direc
-            where
-                uCoo = width * x
-                vCoo = height * y
-                direc = uCoo*^u ^+^ vCoo*^v ^-^ w
+                    direc = uCoo*^u ^+^ vCoo*^v ^-^ w
 
 
 instance Camera PerspectiveCamera where
     rayTrace camera tracer world = do
-        rays <- generateRays camera
+        let rays = generateRays camera
         sequenceRand Par $ (`A.map` rays) $ \getRayCell -> do
             rayCell <- getRayCell
             cell <- mapM (traceRay tracer world) rayCell

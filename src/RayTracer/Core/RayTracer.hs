@@ -17,8 +17,9 @@ import RayTracer.Core.World
 import RayTracer.Core.SceneObject
 import RayTracer.Core.Sampling
 
+
 -- | A class representing a ray tracer which can trace a ray through a world and return the resulting color.
-class (Spectrum s) => RayTracer a s where
+class RayTracer a s where
     -- | Trace a ray through a given world and return the resulting color.
     traceRay :: (MonadRandom m) => a -> World s -> Ray Double -> m RGB
 
@@ -32,7 +33,7 @@ traceHittingRay onHit shape ray =
 -- | A type representing a ray tracer that can detect hits.
 data HitRayTracer = HitRayTracer
 
-instance (Spectrum s) => RayTracer HitRayTracer s where
+instance RayTracer HitRayTracer s where
     traceRay HitRayTracer = traceHittingRay $ \_ _ -> RGB 1 0 0
 
 
@@ -46,7 +47,7 @@ data LinearDepthRayTracer =
         Double -- ^ The maximum depth that will be mapped to black
 
 
-instance (Spectrum s) => RayTracer LinearDepthRayTracer s where
+instance RayTracer LinearDepthRayTracer s where
     traceRay (LinearDepthRayTracer minD maxD) = traceHittingRay $ \t _ -> Gray $ 1 - (t - minD)/(maxD - minD)
 
 
@@ -58,20 +59,20 @@ newtype ExponentialDepthRayTracer =
         Double -- ^ The average depth that will be mapped to (0.5 * white).
 
 
-instance (Spectrum s) => RayTracer ExponentialDepthRayTracer s where
+instance RayTracer ExponentialDepthRayTracer s where
     traceRay (ExponentialDepthRayTracer average) = traceHittingRay $ \t _ -> Gray $ 0.5**(t/average)
 
 
 -- | A type representing a ray tracer that shows the shading normals of a world relative to the ray by color.
 data NormalRayTracer = NormalRayTracer
 
-instance (Spectrum s) => RayTracer NormalRayTracer s where
+instance RayTracer NormalRayTracer s where
     traceRay NormalRayTracer = traceHittingRay $ \_ (Vector x y z) -> (RGB x y z ^+^ white) ^/ 2
 
 
 newtype IntersectionTestsTracer = IntersectionTestsTracer Int
 
-instance (Spectrum s) => RayTracer IntersectionTestsTracer s where
+instance RayTracer IntersectionTestsTracer s where
     traceRay (IntersectionTestsTracer cap) world ray
         | p < 1     = return $ RGB 0 p 1
         | p < 2     = return $ RGB 0 1 (2-p)
@@ -87,11 +88,11 @@ data DiffuseRayTracer = DiffuseRayTracer
 
 instance (Spectrum s) => RayTracer DiffuseRayTracer s where
     traceRay _ world ray = do
-        pixel <- case findHit ray $ objects world of
+        pixel <- case findHit ray world of
                  Nothing -> return black
-                 Just (Hit s brdf (_, n, _)) -> do
+                 Just (Hit _ brdf (_, n, _)) -> do
                      let l_out = negateV $ direction ray
-                     return $ max 0 (l_out <.> n) *^ (brdf l_out l_out ^+^ s)
+                     return $ max 0 (l_out <.> n) *^ brdf l_out l_out
         return $ toRGB $ gammaCorrect pixel
 
 
@@ -125,11 +126,11 @@ filterRadianceSample sample world ray brdf point normal = sumV radiances
 
 instance (Spectrum s) => RayTracer SpectrumIndependentRayTracer s where
     traceRay (SpectrumIndependentRayTracer strat) world ray = do
-        pixel <- case findHit ray $ objects world of
+        pixel <- case findHit ray world of
                  Nothing -> return black
                  Just (Hit le brdf (t, n, _)) -> do
                      let p  = shadowPoint (follow ray t) n
-                     samples <- mapM (\light -> generateSample strat light p) $ lights world
+                     samples <- mapM (\light -> generateSample strat light p) $ worldLights world
                      return $ foldr ((^+^) . (\sample -> filterRadianceSample sample world ray brdf p n)) le samples
         return $ toRGB $ gammaCorrect pixel
 

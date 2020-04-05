@@ -78,16 +78,16 @@ class Transformable v a where
                      -> v                -- ^ The inversely transformed transformable
     inverseTransform t = transform $ inverse t
 
-instance (Num a) => Transformable (Matrix a) a where
+instance (Num a1, a1 ~ a2) => Transformable (Matrix a1) a2 where
     transform (Transformation mat _) = transformMatrix mat
-instance (Num a, a ~ b) => Transformable (Transformation a) b where
+instance (Num a1, a1 ~ a2) => Transformable (Transformation a1) a2 where
     transform (Transformation mat1 inv1) (Transformation mat2 inv2) = Transformation mat inv
         where
             mat = transformMatrix mat1 mat2
             inv = transformMatrix inv2 inv1
-instance (Num a) => Transformable (Vector a) a where
+instance (Num a1, a1 ~ a2) => Transformable (Vector a1) a2 where
     transform (Transformation mat _) = transformVector mat
-instance (Num a) => Transformable (Point a) a where
+instance (Num a1, a1 ~ a2) => Transformable (Point a1) a2 where
     transform (Transformation mat _) = transformPoint mat
 instance (Transformable t a) => Transformable [t] a where
     transform trans = map (transform trans)
