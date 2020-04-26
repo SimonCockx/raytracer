@@ -5,9 +5,7 @@ module RayTracer.Random
     , RandM
     , createGen
     , createGenArray
-    --, createRandomArray
     , sequenceRand
-    --, getWorkerStates
     , module System.Random
     , MonadRandom (..)
     , module Control.Monad.Random.Lazy
@@ -33,17 +31,7 @@ createGenArray comp sz = do
     let genArr = randomArray gen split split comp sz
     return $ computeAs B genArr
 
--- createRandomArray :: (MonadSplit g m, RandomGen g, Index ix) => (ix -> g -> e) -> Comp -> Sz ix -> m (Array D ix e)
--- createRandomArray f comp sz = do
---     genArr <- createGenArray comp sz
---     return $ imap f genArr
-
 sequenceRand :: (Source r ix (Rand g e), RandomGen g) => Comp -> Array r ix (Rand g e) -> Rand g (Array D ix e)
 sequenceRand comp arr = do
     genArr <- createGenArray comp (size arr)
     return $ A.zipWith (\a g -> fst $ runRand a g) arr genArr
-
--- getWorkerStates :: (MonadIO m, RandomGen g) => g -> Comp -> m (WorkerStates g)
--- getWorkerStates gen comp = initWorkerStates comp (\worker -> return $ workerGens !! getWorkerId worker)
---     where
---         workerGens = gen : map (snd . split) workerGens

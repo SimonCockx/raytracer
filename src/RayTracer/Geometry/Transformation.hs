@@ -2,17 +2,21 @@ module RayTracer.Geometry.Transformation
     ( Transformation
     , Transformable (..)
     , Transformed (..)
+    , innerTransform
     , inverse
     , normalTransform
     , inverseNormalTransform
+    , identity
     , translate
     , translateP
     , translateV
     , rotateX
     , rotateY
     , rotateZ
+    , rotateAround
     , scale
     , scaleUni
+    , alignWithXAxis
     ) where
 
 import RayTracer.Geometry.Vector
@@ -78,6 +82,7 @@ class Transformable v a where
                      -> v                -- ^ The inversely transformed transformable
     inverseTransform t = transform $ inverse t
 
+
 instance (Num a1, a1 ~ a2) => Transformable (Matrix a1) a2 where
     transform (Transformation mat _) = transformMatrix mat
 instance (Num a1, a1 ~ a2) => Transformable (Transformation a1) a2 where
@@ -98,13 +103,16 @@ data Transformed a = Transformed (Transformation Double) a
 instance Transformable (Transformed a) Double where
     transform t (Transformed t' s) = Transformed (t `transform` t') s
 
+innerTransform :: Transformation Double -> Transformed a -> Transformed a
+innerTransform tr (Transformed tr' s) = Transformed (tr' `transform` tr) s
+
 
 -- | Invert a transformation.
 inverse :: Transformation a -- ^ The transformation to invert
         -> Transformation a -- ^ The inverted transformation
 inverse (Transformation mat inv) = Transformation inv mat
 
--- | Transform a normal with the given transformation.
+-- | Transform a normal with the given transformation and normalize the result.
 normalTransform :: (Floating a, Eq a, AdditiveGroup a)
                 => Transformation a -- ^ The transformation
                 -> Vector a         -- ^ The normal to be transformed
@@ -116,6 +124,14 @@ inverseNormalTransform :: (Floating a, Eq a, AdditiveGroup a)
                        -> Vector a         -- ^ The inversely transformed normal
 inverseNormalTransform t = normalTransform $ inverse t
 
+
+identity :: (Num a) => Transformation a
+identity = Transformation i i
+    where
+        i = Matrix 1 0 0 0
+                   0 1 0 0
+                   0 0 1 0
+                   0 0 0 1
 
 -- | Create a translation with given coordinates.
 translate :: (Num a)
@@ -189,6 +205,13 @@ rotateZ angle = Transformation mat inv
                      0 0  0 1
         inv = transpose mat
 
+
+rotateAround :: (RealFloat a, AdditiveGroup a) => Vector a -> a -> Transformation a
+rotateAround n angle = align `inverseTransform` rotateX angle `transform` align
+    where
+        align = alignWithXAxis n
+
+
 -- | Create a scaling transformation with given factors.
 scale :: (Fractional a)
       => a                -- ^ The x factor
@@ -211,3 +234,12 @@ scaleUni :: (Fractional a)
       => a                -- ^ The factor
       -> Transformation a -- ^ The resulting scaling transformation
 scaleUni f = scale f f f
+
+
+alignWithXAxis :: (RealFloat a, AdditiveGroup a) => Vector a -> Transformation a
+alignWithXAxis v@(Vector x y z) =
+    let phi = atan2 y x
+        theta = asin $ z/l
+    in rotateY theta `transform` rotateZ (-phi)
+    where
+        l = norm v

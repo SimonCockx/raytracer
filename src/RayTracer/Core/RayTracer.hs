@@ -6,7 +6,10 @@ module RayTracer.Core.RayTracer
     , NormalRayTracer (..)
     , IntersectionTestsTracer (..)
     , DiffuseRayTracer (..)
-    , SpectrumIndependentRayTracer (..)
+    , DirectLightningTracer (..)
+    , SpecificDepthPathTracer (..)
+    , MaxDepthPathTracer (..)
+    , RussianRoulettePathTracer (..)
     ) where
 
 import RayTracer.Random
@@ -63,7 +66,7 @@ instance RayTracer ExponentialDepthRayTracer s where
     traceRay (ExponentialDepthRayTracer average) = traceHittingRay $ \t _ -> Gray $ 0.5**(t/average)
 
 
--- | A type representing a ray tracer that shows the shading normals of a world relative to the ray by color.
+-- | A type representing a ray tracer that shows the shading normals of a world by color.
 data NormalRayTracer = NormalRayTracer
 
 instance RayTracer NormalRayTracer s where
@@ -88,21 +91,14 @@ data DiffuseRayTracer = DiffuseRayTracer
 
 instance (Spectrum s) => RayTracer DiffuseRayTracer s where
     traceRay _ world ray = do
-        pixel <- case findHit ray world of
-                 Nothing -> return black
-                 Just (Hit _ brdf (_, n, _)) -> do
+        pixel <- case findInspectingHit ray world of
+                 Nothing -> return $ worldBackground world (direction ray)
+                 Just (InspectingHit _ brdf (_, n, _)) -> do
                      let l_out = negateV $ direction ray
                      return $ max 0 (l_out <.> n) *^ brdf l_out l_out
-        return $ toRGB $ gammaCorrect pixel
+        return $ gammaCorrect $ toRGB pixel
 
 
-
--- | The offset for a shadow ray to remove self-shadow artefacts.
-selfShadowFactor :: Double
-selfShadowFactor = 1e-10
-
-shadowPoint :: Point Double -> Vector Double -> Point Double
-shadowPoint p n = p <+^ selfShadowFactor *^ n
 
 isVisible :: Point Double -> Point Double -> World s -> Bool
 isVisible p1 p2 world
@@ -113,24 +109,101 @@ isVisible p1 p2 world
 
 
 -- | A type representing a ray tracer that traces direct lightning for any spectrum.
-newtype SpectrumIndependentRayTracer = SpectrumIndependentRayTracer SamplingStrategy
+newtype DirectLightningTracer = DirectLightningTracer SamplingStrategy
 
-filterRadianceSample :: (Spectrum s) => [(Point Double, s)] -> World s -> Ray Double -> BRDF s -> Point Double -> Vector Double -> s
-filterRadianceSample sample world ray brdf point normal = sumV radiances
-    where
-        l_out = negateV $ direction ray
-        visibleSample = filter (\(p, _) -> isVisible point p world) sample
-        radiances = map (\(p, s) -> let l_in = if p == point then normal else normalize $ p <-> point in
-                                    max 0 (l_in <.> normal) *^ brdf l_in l_out ^*^ s) visibleSample
+sampleLight :: (MonadRandom m, Spectrum s) => MaterialHit s -> Ray Double -> SamplingStrategy -> [Light s] -> World s -> m (s, s)
+sampleLight matHit ray strat lights world = do
+    ShadowHit emit reflSamples <- shadowReflectHit matHit strat lights
+    let InspectingHit _ _ (t, normal, _) = inspectHit matHit
+        point = shadowPoint (follow ray t) normal
+        visibleSamples = filter (\(p, _) -> isVisible point p world) reflSamples
+        radiances = map snd visibleSamples
+    return (emit, sumV radiances)
 
 
-instance (Spectrum s) => RayTracer SpectrumIndependentRayTracer s where
-    traceRay (SpectrumIndependentRayTracer strat) world ray = do
+instance (Spectrum s) => RayTracer DirectLightningTracer s where
+    traceRay (DirectLightningTracer strat) world ray = do
         pixel <- case findHit ray world of
-                 Nothing -> return black
-                 Just (Hit le brdf (t, n, _)) -> do
-                     let p  = shadowPoint (follow ray t) n
-                     samples <- mapM (\light -> generateSample strat light p) $ worldLights world
-                     return $ foldr ((^+^) . (\sample -> filterRadianceSample sample world ray brdf p n)) le samples
-        return $ toRGB $ gammaCorrect pixel
+            Nothing -> return $ worldBackground world (direction ray)
+            Just matHit -> uncurry (^+^) <$> sampleLight matHit ray strat (worldLights world) world
+        return $ gammaCorrect $ toRGB pixel
+
+
+-- A help functions for path tracers
+
+sampleSingleLight :: (MonadRandom m, Spectrum s) => MaterialHit s -> Ray Double -> World s -> m (s, s)
+sampleSingleLight matHit ray world = do
+    light <- (ls !!) <$> getRandomR (0, cl - 1)
+    (emit, spec) <- sampleLight matHit ray (Random 1) [light] world
+    return (emit, fromIntegral cl *^ spec)
+        where
+            ls = worldLights world
+            cl = length ls
+
+traceShadowRay :: (MonadRandom m, Spectrum s) => Ray Double -> World s -> m (s, s)
+traceShadowRay ray world = case findHit ray world of
+    Nothing     -> return (worldBackground world (direction ray), black)
+    Just matHit -> sampleSingleLight matHit ray world
+
+
+-- | A type representing a path tracer that traces rays for a specific depth.
+newtype SpecificDepthPathTracer = SpecificDepthPathTracer Int
+
+traceDepthReflectanceRay :: (MonadRandom m, Spectrum s) => Int -> Ray Double -> World s -> m (s, s)
+traceDepthReflectanceRay 0 ray world = traceShadowRay ray world
+traceDepthReflectanceRay depth ray world = case findReflectingHit ray world of
+    Nothing -> return (worldBackground world (direction ray), black)
+    Just mHit -> do
+        ReflectingHit _ refl newRay <- mHit
+        (_, spec) <- traceDepthReflectanceRay (depth - 1) newRay world
+        return (black, refl ^*^ spec)
+
+instance (Spectrum s) => RayTracer SpecificDepthPathTracer s where
+    traceRay (SpecificDepthPathTracer depth) world ray = do
+        (emit, spec) <- traceDepthReflectanceRay depth ray world
+        return $ gammaCorrect $ toRGB $ emit ^+^ spec
+
+
+-- | A type representing a path tracer that traces rays for a max depth and samples light at each intersection.
+newtype MaxDepthPathTracer = MaxDepthPathTracer Int
+
+traceMaxDepthReflectanceRay :: (MonadRandom m, Spectrum s) => Int -> Ray Double -> World s -> m (s, s)
+traceMaxDepthReflectanceRay 0 ray world = traceShadowRay ray world
+traceMaxDepthReflectanceRay depth ray world = case findHit ray world of
+    Nothing -> return (worldBackground world (direction ray), black)
+    Just matHit -> do
+        (_, lightSpec) <- sampleSingleLight matHit ray world
+        ReflectingHit emit refl newRay <- reflectHit matHit
+        (_, spec) <- traceMaxDepthReflectanceRay (depth - 1) newRay world
+        return (emit, lightSpec ^+^ refl ^*^ spec)
+
+instance (Spectrum s) => RayTracer MaxDepthPathTracer s where
+    traceRay (MaxDepthPathTracer depth) world ray = do
+        (emit, spec) <- traceMaxDepthReflectanceRay depth ray world
+        return $ gammaCorrect $ toRGB $ emit ^+^ spec
+
+
+-- | A type representing a path tracer with Russian Roulette.
+newtype RussianRoulettePathTracer = RussianRoulettePathTracer Double
+
+traceRouletteReflectanceRay :: (MonadRandom m, Spectrum s) => Double -> Ray Double -> World s -> m (s, s)
+traceRouletteReflectanceRay alpha ray world = do
+    x <- getRandom
+    if x < alpha then do
+        (emit, spec) <- traceShadowRay ray world
+        return (emit, (1/alpha) *^ spec)
+    else case findReflectingHit ray world of
+        Nothing -> return (black, black)
+        Just mHit -> do
+            ReflectingHit emit refl newRay <- mHit
+            (_, spec) <- traceRouletteReflectanceRay alpha newRay world
+            return (emit, (1/(1 - alpha)) *^ (refl ^*^ spec))
+
+instance (Spectrum s) => RayTracer RussianRoulettePathTracer s where
+    traceRay (RussianRoulettePathTracer alpha) world ray = do
+        (emit, spec) <- traceRouletteReflectanceRay alpha ray world
+        return $ gammaCorrect $ toRGB $ (emit ^+^ spec)
+
+
+
 

@@ -1,8 +1,14 @@
 module RayTracer.Geometry.Shapes
     ( createBox
+    , Plane (..)
+    , Rectangle (..)
+    , createRectangle
+    , Disc (..)
+    , createDisc
     , Sphere (..)
     , createSphere
-    , Cylinder (..)
+    , OpenCylinder (..)
+    , createOpenCylinder
     , createCylinder
     , createTriangle
     , readObjFileAsList
@@ -21,6 +27,65 @@ import Data.List.Split
 
 createBox :: Double -> Double -> Double -> Transformed AABB
 createBox x y z = Transformed (scale x y z) $ createAABB (pure (-0.5)) $ pure 0.5
+
+
+data Plane = Plane (Point Double) (Vector Double)
+    deriving (Show)
+
+instance Shape Plane where
+    intersect ray (Plane p n)
+        | t < 0     = Nothing
+        | otherwise = Just (t, n, follow ray t <-> p)
+        where
+            lProj = l <.> n
+            dp = p <-> o
+            dpProj = dp <.> n
+            t = dpProj / lProj
+            l = direction ray
+            o = origin ray
+    boundingBox _ = spaceAABB
+    boundedNode = UnboundedNode
+instance Transformable Plane Double where
+    transform tr (Plane p n) = Plane (transform tr p) (normalTransform tr n)
+
+
+data Rectangle = Rectangle
+    deriving (Show)
+
+instance Shape Rectangle where
+    intersect ray _
+        | t < 0 || abs pz > 0.5 || abs py > 0.5 = Nothing
+        | otherwise                             = Just (t, Vector 1 0 0, Vector (0.5 + pz) (0.5 + py) 0)
+        where
+            t = -ox/lx
+            Point _ py pz = follow ray t
+            Vector lx _ _ = direction ray
+            Point ox _ _ = origin ray
+    boundingBox _ = createAABB (Point 0 (-0.5) (-0.5)) (Point 0 0.5 0.5)
+    boundedNode = UnboundedNode
+
+createRectangle :: Vector Double -> Double -> Double -> Transformed Rectangle
+createRectangle n width height = Transformed (alignWithXAxis n `inverseTransform` scale 1 height width) Rectangle
+
+
+data Disc = Disc
+    deriving (Show)
+
+instance Shape Disc where
+    intersect ray _
+        | t < 0 || py*py + pz*pz > 1 = Nothing
+        | otherwise                  = Just (t, Vector 1 0 0, Vector pz py 0)
+        where
+            t = -ox/lx
+            Point _ py pz = follow ray t
+            Vector lx _ _ = direction ray
+            Point ox _ _ = origin ray
+    boundingBox _ = createAABB (Point 0 (-1) (-1)) (Point 0 1 1)
+    boundedNode = UnboundedNode
+
+createDisc :: Vector Double -> Double -> Transformed Disc
+createDisc n r = Transformed (alignWithXAxis n `inverseTransform` scaleUni r) Disc
+
 
 -- | A type representing a unit sphere.
 data Sphere = Sphere
@@ -50,48 +115,45 @@ createSphere :: Double -> Transformed Sphere
 createSphere radius = Transformed (scaleUni radius) Sphere
 
 
-data Cylinder = Cylinder
+data OpenCylinder = OpenCylinder
     deriving (Show)
     
-instance Shape Cylinder where
-    intersect ray Cylinder = closestIntersection upperIntersection $ closestIntersection lowerIntersection surfaceIntersection
+instance Shape OpenCylinder where
+    intersect ray OpenCylinder = surfaceIntersection
         where
-            a = xd*xd + zd*zd
-            b = 2*(xo*xd + zo*zd)
-            c = xo*xo + zo*zo - 1
+            a = yd*yd + zd*zd
+            b = 2*(yo*yd + zo*zd)
+            c = yo*yo + zo*zo - 1
             d = b*b - 4*a*c
-            tUp = (0.5 - yo)/yd
-            xUp = xo + tUp*xd
-            zUp = zo + tUp*zd
-            tDown = (-0.5 - yo)/yd
-            xDown = xo + tDown*xd
-            zDown = zo + tDown*zd
             Point xo yo zo = origin ray
             Vector xd yd zd = direction ray
-            upperIntersection
-                | tUp < 0 || xUp*xUp + zUp*zUp > 1 = Nothing
-                | otherwise                        = Just (tUp, Vector 0 1 0, zeroV)
-            lowerIntersection
-                | tDown < 0 || xDown*xDown + zDown*zDown > 1 = Nothing
-                | otherwise                                  = Just (tDown, Vector 0 (-1) 0, zeroV)
-            getSurfaceNormal t' = let Point x _ z = follow ray t' in normalize $ Vector x 0 z
+            getSurfaceNormal t' = let Point _ y z = follow ray t' in Vector 0 y z
+            getUvw t' = let Point x y z = follow ray t' in Vector ((atan2 y z + pi)/(2*pi)) (x + 0.5) 0 
             surfaceIntersection
                 | d < 0     = Nothing
                 | d == 0    = let t = -b/2/a
-                                  y = yo + t*yd in if t < 0 || y < -0.5 || y > 0.5 then Nothing else Just (t, getSurfaceNormal t, zeroV)
+                                  x = xo + t*xd in if t < 0 || x < -0.5 || x > 0.5 then Nothing else Just (t, getSurfaceNormal t, getUvw t)
                 | otherwise =
                     let dSqrt = sqrt d
                         t1 = (-b - dSqrt)/2/a
-                        y1 = yo + t1*yd in
-                    if t1 >= 0 && -0.5 <= y1 && y1 <= 0.5 then Just (t1, getSurfaceNormal t1, zeroV)
+                        x1 = xo + t1*xd in
+                    if t1 >= 0 && -0.5 <= x1 && x1 <= 0.5 then Just (t1, getSurfaceNormal t1, getUvw t1)
                     else let t2 = (-b + dSqrt)/2/a
-                             y2 = yo + t2*yd in
-                        if t2 >= 0 && -0.5 <= y2 && y2 <= 0.5 then Just (t2, getSurfaceNormal t2, zeroV)
+                             x2 = xo + t2*xd in
+                        if t2 >= 0 && -0.5 <= x2 && x2 <= 0.5 then Just (t2, getSurfaceNormal t2, getUvw t2)
                         else Nothing
-    boundingBox Cylinder = createAABB (Point (-1) (-0.5) (-1)) (Point 1 0.5 1)
+    boundingBox OpenCylinder = createAABB (Point (-0.5) (-1) (-1)) (Point 0.5 1 1)
 
-createCylinder :: Double -> Double -> Transformed Cylinder
-createCylinder radius l = Transformed (scale radius l radius) Cylinder
+createOpenCylinder :: Vector Double -> Double -> Double -> Transformed OpenCylinder
+createOpenCylinder axis radius l = Transformed (alignWithXAxis axis `inverseTransform` scale l radius radius) OpenCylinder
+
+createCylinder :: Vector Double -> Double -> Double -> Transformed [ShapeWrapper]
+createCylinder axis radius l = Transformed (alignWithXAxis axis `inverseTransform` scale l radius radius)
+    [ ShapeWrapper OpenCylinder
+    , ShapeWrapper $ translate (0.5::Double) 0 0 `transform` createDisc (Vector 1 0 0) 1
+    , ShapeWrapper $ translate (-0.5::Double) 0 0 `transform` createDisc (Vector (-1) 0 0) 1
+    ]
+
 
 
 intersectTriangle :: Ray Double -> Point Double -> Point Double -> Point Double -> Vector Double -> Vector Double -> Vector Double -> Maybe (Double, Double, Double, Double)

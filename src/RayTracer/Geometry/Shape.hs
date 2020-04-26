@@ -4,12 +4,15 @@ module RayTracer.Geometry.Shape
     ( Shape (..)
     , closest
     , Intersection
+    , ShapeWrapper (..)
+    , DoubleSided (..)
     , BoundedShapeNode (..)
     , closestIntersection
     , innerIntersect
     , innerNumberOfIntersectionTests
     , AABB (minimumPoint, maximumPoint, centroid)
     , pattern AABB
+    , spaceAABB
     , createAABB
     , getArea
     , getAABB
@@ -50,11 +53,32 @@ class (Show a) => Shape a where
     boundedNode :: a -> BoundedShapeNode
     boundedNode shape = ShapeNode (boundingBox shape) shape
 
+data ShapeWrapper = forall a. (Shape a) => ShapeWrapper a
+instance Show ShapeWrapper where
+    show (ShapeWrapper shape) = "ShapeWrapper (" ++ show shape ++ ")"
+instance Shape ShapeWrapper where
+    intersect ray (ShapeWrapper shape) = intersect ray shape
+    numberOfIntersectionTests ray (ShapeWrapper shape) = numberOfIntersectionTests ray shape
+    boundingBox (ShapeWrapper shape) = boundingBox shape
+    boundedNode (ShapeWrapper shape) = boundedNode shape
+
 instance Shape () where
     intersect ray () = Nothing
     numberOfIntersectionTests ray () = 0
     boundingBox () = createAABB (pure 1) (pure (-1))
     boundedNode = UnboundedNode
+
+newtype DoubleSided a = DoubleSided a
+    deriving (Show)
+instance (Shape a) => Shape (DoubleSided a) where
+    intersect ray (DoubleSided shape) = do
+        (t, n, uvw) <- intersect ray shape
+        return $ (t, if direction ray <.> n > 0 then negateV n else n, uvw)
+    numberOfIntersectionTests ray (DoubleSided shape) = numberOfIntersectionTests ray shape
+    boundingBox (DoubleSided shape) = boundingBox shape
+    boundedNode (DoubleSided shape) = boundedNode shape
+instance (Transformable a b) => Transformable (DoubleSided a) b where
+    transform tr (DoubleSided shape) = DoubleSided (transform tr shape)
 
 data BoundedShapeNode = ShapeBranchNode AABB [BoundedShapeNode]
                       | forall a. (Shape a, Show a) => ShapeNode AABB a
@@ -76,7 +100,7 @@ instance Shape BoundedShapeNode where
         Just _  -> innerNumberOfIntersectionTests ray volume
     boundingBox (ShapeBranchNode box _) = box
     boundingBox (ShapeNode box _) = box
-    boundingBox (UnboundedNode box) = AABBox (pure (-1/0)) (pure (1/0)) (pure 0)
+    boundingBox (UnboundedNode box) = spaceAABB
     boundingBox (TransformedShapeNode box _ _) = box
     boundedNode = id
 
@@ -164,6 +188,8 @@ pattern AABB minp maxp cent <- AABBox minp maxp cent
 
 data AABB = AABBox {minimumPoint :: Point Double, maximumPoint :: Point Double, centroid :: Point Double}
     deriving (Show)
+spaceAABB :: AABB
+spaceAABB = AABBox (pure (-1/0)) (pure (1/0)) (pure 0)
 createAABB :: Point Double -> Point Double -> AABB
 createAABB minP maxP = AABBox minP maxP $ minP <+^ (maxP <-> minP)^/2
 getArea :: AABB -> Double

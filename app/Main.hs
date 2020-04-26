@@ -5,6 +5,7 @@ module Main where
 import RayTracer
 import Data.Massiv.Array.IO hiding (Image, encode)
 import Data.Massiv.Array hiding (map, mapM, mapM_, zip)
+import qualified Data.Massiv.Array as A
 
 import Data.Time
 import System.IO
@@ -13,27 +14,26 @@ import Scenes
 
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 50 30 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 3)
+camera = createPerspectiveCamera 500 360 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/1.5) (RegularGrid 16)
 
 createScene :: IO (Scene RGB)
 createScene = do
     teaPotObj <- readObjFile "objects/teaPot.obj"
-    vlekje <- readTextureMap "objects/vlekje.png" :: IO (TextureMap RGB)
     let floor = translate 0 (0::Double) 0 `transform` createBox 50 2 50
         left  = translate (-8:: Double) 0 0 `transform` createBox 2 50 50
         right = translate (8::Double) 0 0 `transform` createBox 2 50 50
         back  = translate 0 0 (-16::Double) `transform` createBox 50 50 2
         top = translate 0 (16::Double) 0 `transform` createBox 50 2 50
-        teaPot1 = Transformed ((translate (5::Double) 9 (-13)) `transform` (scaleUni (3::Double)) `transform` rotateY (-pi/6::Double)) teaPotObj
-        teaPot2 = Transformed ((translate (0::Double) 1 (-10)) `transform` (scaleUni 4)) teaPotObj
-        light = Transformed (translate 0 14.5 (-8::Double)) $ AreaLight 4 4 $ RGB 2 2 2
+        sphere = translate (4:: Double) 3 (-9.5) `transform` createSphere 2
+        block = translate (-2::Double) 2 (-8.5) `transform` rotateY (pi/6::Double) `transform` createBox 4 6 4
+        light = translate 0 14.99 (-10::Double) `transform` createAreaLight (Vector 0 1 0) 4 4 (RGB 9 9 9)
 
-        world = World [ withMaterial teaPot1 (DiffuseTexture vlekje (\(Vector u v w) -> (u, v)))
-                      , withMaterial teaPot2 (Diffuse $ RGB 0.6 0.1 0.3)
+        world = createWorld [ withMaterial sphere Reflective
                       , simpleObject floor
                       , withMaterial left (Diffuse $ RGB 1 0 0)
-                      , withMaterial back (Diffuse $ RGB 0 1 0)
-                      , withMaterial right (Diffuse $ RGB 0 0 1)
+                      , withMaterial back (Diffuse $ RGB 1 1 1)
+                      , withMaterial right (Diffuse $ RGB 0 1 0)
+                      , simpleObject block
                       , simpleObject top
                       , SceneLight light
                       ]
@@ -41,20 +41,40 @@ createScene = do
                       ]
     return $ Scene (insertBoundingBoxes world) camera
 
-rayTracer = SpectrumIndependentRayTracer $ RegularGrid 3
+
+data AnyRayTracer s = forall a. (RayTracer a s) => AnyRayTracer a
+instance (Spectrum s1, s1 ~ s2) => RayTracer (AnyRayTracer s1) s2 where
+    traceRay (AnyRayTracer t) = traceRay t
+
+rayTracer = RussianRoulettePathTracer 0.7
+
+tracers :: [AnyRayTracer RGB]
+tracers = [ AnyRayTracer $ DirectLightningTracer $ Random 1
+          , AnyRayTracer $ SpecificDepthPathTracer 0
+          , AnyRayTracer $ SpecificDepthPathTracer 1
+          , AnyRayTracer $ SpecificDepthPathTracer 2
+          , AnyRayTracer $ SpecificDepthPathTracer 3
+          , AnyRayTracer $ RussianRoulettePathTracer 0.5
+          ]
 
 renderFast :: (Spectrum s) => IO (Scene s) -> IO Image
 renderFast getScene = do
     scene <- getScene
     let fastScene = Scene (insertBoundingBoxes $ getWorld scene)
                           (createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1))
-    return $ render gen (SpectrumIndependentRayTracer $ Random 1) fastScene
+    return $ render gen (DirectLightningTracer $ Random 1) fastScene
 
-justRender :: (Spectrum s) => IO (Scene s) -> IO Image
+justRender :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 justRender getScene = do
     scene <- getScene
     let sceneWithMyCamera = Scene (getWorld scene) camera
     return $ render gen rayTracer sceneWithMyCamera
+
+justRenderWith :: (Spectrum s, Show s, RayTracer a s) => a -> IO (Scene s) -> IO Image
+justRenderWith tracer getScene = do
+    scene <- getScene
+    let sceneWithMyCamera = Scene (getWorld scene) camera
+    return $ render gen tracer sceneWithMyCamera
 
 gen :: Gen
 gen = createGen 29
@@ -69,6 +89,7 @@ saveAs :: String -> Image -> IO ()
 saveAs name image = do
     timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
     writeImage ("out/results/" ++ timeStamp ++ " - " ++ name ++ ".jpg") image
+
 
 display :: Image -> IO ()
 display = displayImageUsing defaultViewer True
@@ -90,7 +111,7 @@ measureRadiance = do
     hClose h
     (`mapM_` shadowRays) $ \n -> do
         g <- newSMGen
-        let randImage = rayTrace camera (SpectrumIndependentRayTracer $ Random n) world
+        let randImage = rayTrace camera (DirectLightningTracer $ Random n) world
             (spectralImages, newGen) = (`runRand` g) $ replicateM measurements randImage
             lightRads = map (\spectralImage -> let RGB r _ _ = evaluate' spectralImage lightPoint in r) spectralImages
             penumbraRads = map (\spectralImage -> let RGB r _ _ = evaluate' spectralImage penumbraPoint in r) spectralImages
@@ -129,11 +150,28 @@ displayBHVLayers depth name scene = mapM_ (\n -> do
     saveAs (name ++ show n) img) $ [0..depth]
 
 
+traceWithMaxDepth :: (Spectrum s, Show s) => Int -> IO (Scene s) -> IO Image
+traceWithMaxDepth depth getScene = do
+    scene <- getScene
+    let Scene world _ = scene -- TODO: get camera from scene instead (problem with existential types...)
+        contributions = fst $ (`runRand` gen) $ (`mapM` [0..depth]) $ \d ->
+            inverseGammaCorrectImage <$> rayTrace camera (SpecificDepthPathTracer d) world
+        image = toImage $ gammaCorrectImage $ foldr1 (A.zipWith (^+^)) contributions
+    return image
+
+
 main :: IO ()
 main = do
-    let getScene = processScene insertBoundingBoxes <$> softShadowScene
+    let getScene = createScene
     -- getScene >>= print
     -- (show <$> getScene) >>= writeFile "test.txt"
-    image <- justRender getScene
-    saveAs "test" image
-    display image
+    -- image <- justRenderWith (SpecificDepthPathTracer 0) getScene
+    -- saveAs "depth0" image
+    -- image <- justRenderWith (SpecificDepthPathTracer 1) getScene
+    -- saveAs "depth1" image
+    -- image <- justRenderWith (SpecificDepthPathTracer 2) getScene
+    -- saveAs "depth2" image
+    -- image <- justRenderWith (SpecificDepthPathTracer 3) getScene
+    -- saveAs "depth3" image
+    image <- justRenderWith (MaxDepthPathTracer 3) getScene
+    saveAs "depthMax" image

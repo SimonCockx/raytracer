@@ -16,7 +16,7 @@ processScene processWorld scene = scene {getWorld = processWorld $ getWorld scen
 
 
 insertBoundingBoxes :: (Spectrum s) => World s -> World s
-insertBoundingBoxes world = World (boundedObjectNode world) $ worldLights world
+insertBoundingBoxes World{..} = World {worldRoot = boundedObjectNode worldRoot, ..}
 
 
 bvMaterial :: ProceduralDiffuseTexture RGB
@@ -33,7 +33,7 @@ bvMaterial = ProceduralDiffuseTexture tex
                                 abs (b - c) <= sqrt 2 * thickness)
 
 extractBVHLayer :: Int -> World s -> World RGB
-extractBVHLayer depth world = insertBoundingBoxes $ if isJust boxes then World (fromJust boxes) [] else World () []
+extractBVHLayer depth world = insertBoundingBoxes $ if isJust boxes then createWorld (fromJust boxes) [] else createWorld () []
     where
         rootNode = boundedObjectNode world
         extractObjectBoxes :: Int -> BoundedObjectNode s -> Maybe (BoundedObjectNode RGB)

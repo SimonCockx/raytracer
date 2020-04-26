@@ -55,14 +55,16 @@ default-extensions:
 - GeneralizedNewtypeDeriving
 - TupleSections
 - MultiWayIf
+- RecordWildCards
+- NamedFieldPuns
+- GADTs
 
 library:
   source-dirs: src
   ghc-options:
     - -O2
-    - -fwarn-redundant-constraints
     - -Wall
-    - -Werror
+    - -fwarn-redundant-constraints
 
 executables:
   RayTracer-exe:

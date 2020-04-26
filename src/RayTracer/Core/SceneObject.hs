@@ -2,10 +2,12 @@
 
 module RayTracer.Core.SceneObject
     ( Object (..)
+    , findInspectingHit
+    , findReflectingHit
+    , findShadowHit
     , SceneObject (..)
     , BoundedObjectNode (..)
     , Surface (..)
-    , WhiteShape (..)
     , simpleObject
     , withMaterial
     ) where
@@ -13,19 +15,35 @@ module RayTracer.Core.SceneObject
 import RayTracer.Geometry
 import RayTracer.Lightning
 
+import RayTracer.Core.Sampling
+
 import Data.Maybe
 import Data.List hiding (intersect)
+import Data.Foldable
+
+import RayTracer.Random
 
 
 class (Shape a) => Object a s where
-    findHit :: Ray Double -> a -> Maybe (Hit s)
-    default findHit :: (Material a s) => Ray Double -> a -> Maybe (Hit s)
+    findHit :: Ray Double -> a -> Maybe (MaterialHit s)
+    default findHit :: (Material a s, Spectrum s) => Ray Double -> a -> Maybe (MaterialHit s)
     findHit ray object = do
         intersection <- intersect ray object
-        return $ inspect object ray intersection
+        return $ hitMaterial object ray intersection
     boundedObjectNode :: a -> BoundedObjectNode s
     default boundedObjectNode :: (Material a s) => a -> BoundedObjectNode s
     boundedObjectNode object = MaterialNode object $ boundedNode object
+
+findInspectingHit :: (Object a s) => Ray Double -> a -> Maybe (InspectingHit s)
+findInspectingHit ray obj = inspectHit <$> findHit ray obj
+
+findReflectingHit :: (Object a s, MonadRandom m) => Ray Double -> a -> Maybe (m (ReflectingHit s))
+findReflectingHit ray obj = reflectHit <$> findHit ray obj
+
+findShadowHit :: (Object a s, MonadRandom m) => Ray Double -> a -> SamplingStrategy -> [Light s] -> Maybe (m (ShadowHit s))
+findShadowHit ray obj strat lights = do
+    matHit <- findHit ray obj
+    return $ shadowReflectHit matHit strat lights
 
 instance (Show s, Spectrum s) => Object () s where
     findHit _ () = Nothing
@@ -52,13 +70,13 @@ instance (Spectrum s1, s1 ~ s2) => Object (SceneObject s1) s2 where
     findHit ray (SceneObject obj) = findHit ray obj
     findHit ray (SceneLight light) = do
         intersection <- intersect ray light
-        return $ inspect (Light light) ray intersection
+        return $ hitMaterial (Light light) ray intersection
     boundedObjectNode (SceneObject obj) = boundedObjectNode obj
     boundedObjectNode (SceneLight light) = MaterialNode (Light light) $ boundedNode light
 
 
-closestHit :: Maybe (Hit s) -> Maybe (Hit s) -> Maybe (Hit s)
-closestHit = closest (\(Hit _ _ (t, _, _)) -> t)
+closestHit :: Maybe (MaterialHit s) -> Maybe (MaterialHit s) -> Maybe (MaterialHit s)
+closestHit = closest (\matHit -> let InspectingHit _ _ (t, _, _) = inspectHit matHit in t)
 instance (Object obj s) => Object [obj] s where
     findHit ray = foldr (closestHit . findHit ray) Nothing
     boundedObjectNode [] = ObjectBranchNode (boundingBox ([] :: [AABB])) []
@@ -97,31 +115,24 @@ instance (Shape a) => Shape (Surface a s) where
     boundedNode (Surface shape _) = boundedNode shape
 instance (s1 ~ s2) => Material (Surface a s1) s2 where
     inspect (Surface _ material) = inspect material
-instance (Shape a, s1 ~ s2) => Object (Surface a s1) s2 where
+    reflect (Surface _ material) = reflect material
+    shadowReflect (Surface _ material) = shadowReflect material
+instance (Shape a, s1 ~ s2, Spectrum s1) => Object (Surface a s1) s2 where
 instance (Transformable a b) => Transformable (Surface a s) b where
     transform t (Surface shape brdf) = Surface (t `transform` shape) brdf
 
 
-
-newtype WhiteShape a = WhiteShape a
-    deriving (Show)
-deriving instance (Shape a) => Shape (WhiteShape a)
-instance (Spectrum s) => Material (WhiteShape a) s where
-    inspect _ _ = uniform $ diffuseBRDF white
-instance (Spectrum s, Shape a) => Object (WhiteShape a) s where
-
-
-simpleObject :: (Shape a, Spectrum s) => a -> SceneObject s
-simpleObject = SceneObject . WhiteShape
+simpleObject :: (Shape a, Show s, Spectrum s) => a -> SceneObject s
+simpleObject = (`withMaterial` whiteMaterial)
 
 withMaterial :: (Material m s, Show m, Shape a, Spectrum s) => a -> m -> SceneObject s
 withMaterial shape = SceneObject . Surface shape
 
 
 instance (Object a s) => Object (Transformed a) s where
-    findHit ray (Transformed m obj) = do
-        Hit spec brdf (t, n, uvw) <- findHit (inverseTransform m ray) obj
-        return $ Hit spec (\w1 w2 -> brdf (transform m w1) (transform m w2)) (t, normalTransform m n, uvw)
+    findHit ray (Transformed tr obj) = do
+        matHit <- findHit (inverseTransform tr ray) obj
+        return $ transform tr matHit
     boundedObjectNode (Transformed tr obj) = TransformedObjectNode box tr innerNode
         where
             innerNode = boundedObjectNode obj
@@ -189,13 +200,13 @@ innerNumberOfObjectIntersectionTests ray (ObjectBranchNode _ innerVolumes) = (su
             Just (t, _, _) -> sum $ map (innerNumberOfObjectIntersectionTests ray . snd) $ takeWhile ((<t) . getT) vts
 
 
-innerHit :: (Spectrum s) => Ray Double -> BoundedObjectNode s -> Maybe (Hit s)
+innerHit :: (Spectrum s) => Ray Double -> BoundedObjectNode s -> Maybe (MaterialHit s)
 innerHit ray (MaterialNode material shapeNode) = do
     intersection <- innerIntersect ray shapeNode
-    return $ inspect material ray intersection
-innerHit ray (TransformedObjectNode _ m innerObj) = do
-    Hit spec brdf (t, n, uvw) <- findHit (inverseTransform m ray) innerObj
-    return $ Hit spec (\w1 w2 -> brdf (transform m w1) (transform m w2)) (t, normalTransform m n, uvw)
+    return $ hitMaterial material ray intersection
+innerHit ray (TransformedObjectNode _ tr innerObj) = do
+    matHit <- findHit (inverseTransform tr ray) innerObj
+    return $ transform tr matHit
 innerHit ray (ObjectBranchNode _ innerVolumes) = intersectVts volumesTs
     where
         getT ((t, _, _), _) = t
@@ -204,5 +215,5 @@ innerHit ray (ObjectBranchNode _ innerVolumes) = intersectVts volumesTs
         intersectVts [] = Nothing
         intersectVts ((_, innerVolume):vts) = case innerHit ray innerVolume of
             Nothing     -> intersectVts vts
-            Just hit@(Hit _ _ (t, _, _)) -> foldr (\vt acc -> closestHit acc $ innerHit ray $ snd vt) (Just hit) $ takeWhile ((<t) . getT) vts
-
+            Just matHit -> let InspectingHit _ _ (t, _, _) = inspectHit matHit in
+                foldr (\vt acc -> closestHit acc $ innerHit ray $ snd vt) (Just matHit) $ takeWhile ((<t) . getT) vts

@@ -2,6 +2,8 @@ module RayTracer.Geometry.Ray
     ( Ray (..)
     , createRay
     , follow
+    , selfShadowFactor
+    , shadowPoint
     ) where
 
 import RayTracer.Geometry.Vector
@@ -38,3 +40,11 @@ follow :: (Num a)
        -> Point a -- ^ The resulting point
 follow (Ray o d) t = o <+^ t*^d
 {-# INLINE follow #-}
+
+
+-- | The offset for a shadow ray to remove self-shadow artefacts.
+selfShadowFactor :: Double
+selfShadowFactor = 1e-10
+
+shadowPoint :: Point Double -> Vector Double -> Point Double
+shadowPoint p n = p <+^ selfShadowFactor *^ n
