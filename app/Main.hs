@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Main where
 
 import RayTracer
@@ -11,14 +9,19 @@ import Data.Time
 import System.IO
 import System.Random.SplitMix
 import Scenes
+import Control.Scheduler (getWorkerId)
 
+seeds :: [Seed]
+seeds = [11, 23, 55, 83, 145, 250, 954, 1010]
+
+getWorkerGens :: IO (WorkerStates Gen)
+getWorkerGens = initWorkerStates Par $ createGen . (seeds !!) . getWorkerId
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 500 360 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/1.5) (RegularGrid 16)
+camera = createPerspectiveCamera 300 300 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/1.5) (RegularGrid 4)
 
 createScene :: IO (Scene RGB)
 createScene = do
-    teaPotObj <- readObjFile "objects/teaPot.obj"
     let floor = translate 0 (0::Double) 0 `transform` createBox 50 2 50
         left  = translate (-8:: Double) 0 0 `transform` createBox 2 50 50
         right = translate (8::Double) 0 0 `transform` createBox 2 50 50
@@ -60,24 +63,24 @@ tracers = [ AnyRayTracer $ DirectLightningTracer $ Random 1
 renderFast :: (Spectrum s) => IO (Scene s) -> IO Image
 renderFast getScene = do
     scene <- getScene
+    gens <- getWorkerGens
     let fastScene = Scene (insertBoundingBoxes $ getWorld scene)
                           (createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1))
-    return $ render gen (DirectLightningTracer $ Random 1) fastScene
+    return $ render gens (DirectLightningTracer $ Random 1) fastScene
 
 justRender :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 justRender getScene = do
     scene <- getScene
+    gens <- getWorkerGens
     let sceneWithMyCamera = Scene (getWorld scene) camera
-    return $ render gen rayTracer sceneWithMyCamera
+    return $ render gens rayTracer sceneWithMyCamera
 
 justRenderWith :: (Spectrum s, Show s, RayTracer a s) => a -> IO (Scene s) -> IO Image
 justRenderWith tracer getScene = do
     scene <- getScene
+    gens <- getWorkerGens
     let sceneWithMyCamera = Scene (getWorld scene) camera
-    return $ render gen tracer sceneWithMyCamera
-
-gen :: Gen
-gen = createGen 29
+    return $ render gens tracer sceneWithMyCamera
 
 
 save :: Image -> IO ()
@@ -95,68 +98,28 @@ display :: Image -> IO ()
 display = displayImageUsing defaultViewer True
 
 
-measureRadiance :: IO ()
-measureRadiance = do
-    let lightPoint = 175 :. 150
-        penumbraPoint = 170 :. 60
-        umbraPoint = 150 :. 60
-        shadowRays = [1..1000]
-        measurements = 100
-    Scene world camera <- softShadowScene
-    h <- openFile "out/lightRads.csv" WriteMode
-    hClose h
-    h <- openFile "out/penumbraRads.csv" WriteMode
-    hClose h
-    h <- openFile "out/umbraRads.csv" WriteMode
-    hClose h
-    (`mapM_` shadowRays) $ \n -> do
-        g <- newSMGen
-        let randImage = rayTrace camera (DirectLightningTracer $ Random n) world
-            (spectralImages, newGen) = (`runRand` g) $ replicateM measurements randImage
-            lightRads = map (\spectralImage -> let RGB r _ _ = evaluate' spectralImage lightPoint in r) spectralImages
-            penumbraRads = map (\spectralImage -> let RGB r _ _ = evaluate' spectralImage penumbraPoint in r) spectralImages
-            umbraRads = map (\spectralImage -> let RGB r _ _ = evaluate' spectralImage umbraPoint in r) spectralImages
-        h <- openFile "out/lightRads.csv" AppendMode
-        hPutStr h $ show n ++ ","
-        (`mapM_` (zip [0..] lightRads)) $ \(i, r) -> do
-            when (i /= 0) $ hPutChar h ','
-            hPutStr h $ show r
-        hPutStrLn h ""
-        hClose h
-        h <- openFile "out/penumbraRads.csv" AppendMode
-        hPutStr h $ show n ++ ","
-        (`mapM_` (zip [0..] penumbraRads)) $ \(i, r) -> do
-            when (i /= 0) $ hPutChar h ','
-            hPutStr h $ show r
-        hPutStrLn h ""
-        hClose h
-        h <- openFile "out/umbraRads.csv" AppendMode
-        hPutStr h $ show n ++ ","
-        (`mapM_` (zip [0..] umbraRads)) $ \(i, r) -> do
-            when (i /= 0) $ hPutChar h ','
-            hPutStr h $ show r
-        hPutStrLn h ""
-        hClose h
-        print n
-    return ()
-
-
 displayBHVLayers :: Int -> String -> IO (Scene s) -> IO ()
-displayBHVLayers depth name scene = mapM_ (\n -> do
-    timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
-    putStrLn $ timeStamp ++ " - Iteration " ++ show n
-    scene >>= print . processScene (extractBVHLayer n)
-    img <- render gen DiffuseRayTracer . processScene (extractBVHLayer n) <$> scene
-    saveAs (name ++ show n) img) $ [0..depth]
+displayBHVLayers depth name getScene = do
+  scene <- getScene
+  gens <- getWorkerGens
+  mapM_
+    (\n -> do
+       timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
+       putStrLn $ timeStamp ++ " - Iteration " ++ show n
+       print $ processScene (extractBVHLayer n) scene
+       let img = render gens DiffuseRayTracer $ processScene (extractBVHLayer n) scene
+       saveAs (name ++ show n) img)
+    [0 .. depth]
 
 
 traceWithMaxDepth :: (Spectrum s, Show s) => Int -> IO (Scene s) -> IO Image
 traceWithMaxDepth depth getScene = do
     scene <- getScene
+    gens <- getWorkerGens
     let Scene world _ = scene -- TODO: get camera from scene instead (problem with existential types...)
-        contributions = fst $ (`runRand` gen) $ (`mapM` [0..depth]) $ \d ->
-            inverseGammaCorrectImage <$> rayTrace camera (SpecificDepthPathTracer d) world
-        image = toImage $ gammaCorrectImage $ foldr1 (A.zipWith (^+^)) contributions
+        contributions = (`map` [0..depth]) $ \d ->
+            inverseGammaCorrectImageM $ rayTrace camera (SpecificDepthPathTracer d) world
+        image = toImage gens $ gammaCorrectImageM $ foldr1 (A.zipWith (liftM2 (^+^))) contributions
     return image
 
 

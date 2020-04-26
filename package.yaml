@@ -20,15 +20,18 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/SimonCockx/RayTracer#readme>
 
 dependencies:
-- base >= 4.7 && < 5
+- base
 - massiv
 - massiv-io
-- colour
+- vector
+- Color
 - split
 - safe
 - vector-space
 - time
 - splitmix
+- mwc-random
+- mersenne-random-pure64
 - random
 - mtl
 - MonadRandom
@@ -58,13 +61,13 @@ default-extensions:
 - RecordWildCards
 - NamedFieldPuns
 - GADTs
+- TypeSynonymInstances
 
 library:
   source-dirs: src
   ghc-options:
     - -O2
     - -Wall
-    - -fwarn-redundant-constraints
 
 executables:
   RayTracer-exe:
@@ -78,17 +81,16 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     - -fwarn-incomplete-patterns
-    - -fwarn-redundant-constraints
-  main-bench:
-    main:                Bench.hs
-    source-dirs:         benchmark
-    dependencies:
-    - RayTracer
-    ghc-options:
-    - -O2
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+#  main-bench:
+#    main:                Bench.hs
+#    source-dirs:         benchmark
+#    dependencies:
+#    - RayTracer
+#    ghc-options:
+#    - -O2
+#    - -threaded
+#    - -rtsopts
+#    - -with-rtsopts=-N
 
 tests:
   integration-tests:

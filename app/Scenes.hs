@@ -2,9 +2,25 @@ module Scenes where
 
 import RayTracer
 import Prelude hiding (floor)
+import qualified Prelude as P
 
-import Data.Colour.RGBSpace.HSL (hsl)
-import Data.Colour.RGBSpace (uncurryRGB)
+hsl2rgb :: Double -> Double -> Double -> RGB
+hsl2rgb hue s l = case hi of
+        0 -> RGB p q t
+        1 -> RGB u p t
+        2 -> RGB t p q
+        3 -> RGB t u p
+        4 -> RGB q t p
+        _ -> RGB p t u
+    where
+        h  = hue - fromIntegral (360 * P.floor (hue/360))
+        hi = fromIntegral (P.floor (h/60))
+        f  = (h/60 - hi)*2 - 1
+        span = if l < 0.5 then s*l else s*(1-l)
+        p = l + span
+        q = l + f*span
+        t = l - span
+        u = l - f*span
 
 camera1 :: PerspectiveCamera
 camera1 = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
@@ -42,9 +58,9 @@ textureMapScene = do
     let appleShape = translate 0 (-2) (-4::Double) `transform` appleObj
         apple = withMaterial appleShape $ DiffuseTexture appleTex (\(Vector u v w) -> (u, v))
         sphere1 = translate 3 0 (-5::Double) `transform` rotateZ (pi/6::Double) `transform` (createSphere 1)
-        rainbowSphere1 = withMaterial sphere1 $ ProceduralDiffuseTexture (\(Vector u v w) -> let a = 360/pi*acos v in uncurryRGB RGB $ hsl a 1 0.5)
+        rainbowSphere1 = withMaterial sphere1 $ ProceduralDiffuseTexture (\(Vector u v w) -> let a = 360/pi*acos v in hsl2rgb a 1 0.5)
         sphere2 = translate (-2) (-0.5) (-5::Double) `transform` rotateZ (-pi/3::Double) `transform` (createSphere 1)
-        rainbowSphere2 = withMaterial sphere2 $ ProceduralDiffuseTexture (\(Vector u v w) -> let a = 180*(v + 1) in uncurryRGB RGB $ hsl a 1 0.5)
+        rainbowSphere2 = withMaterial sphere2 $ ProceduralDiffuseTexture (\(Vector u v w) -> let a = 180*(v + 1) in hsl2rgb a 1 0.5)
         sphere3 = translate 2 (-2.5) (-4.5::Double) `transform` rotateZ (0::Double) `transform` (createSphere 1)
         strange = withMaterial sphere3 $ ProceduralDiffuseTexture (\(Vector u v w) -> RGB (sin (10*u*w) + 1/(3+ acos v)**2) (abs v/(1 + cos (20/(w + v**2)) **2)) (exp (u + w - sqrt 2)))
         world = createWorld [ apple

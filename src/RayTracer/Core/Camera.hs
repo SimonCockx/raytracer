@@ -17,11 +17,11 @@ import RayTracer.Lightning
 -- | A class representing a camera that can generate a grid of rays.
 class Camera a where
     -- | Trace all rays from a camera through a world and return the resulting image.
-    rayTrace :: (RayTracer r s)
+    rayTrace :: (MonadRandom m, RayTracer r s)
              => a                     -- ^ The camera to generate rays from
              -> r                     -- ^ The ray tracer to use
              -> World s               -- ^ The world to trace
-             -> RandM (SpectralImage RGB) -- ^ The resulting image
+             -> SpectralImage (m RGB) -- ^ The resulting image
 
 -- | A type representing a camera with perspective.
 data PerspectiveCamera = 
@@ -50,43 +50,44 @@ createPerspectiveCamera :: Int           -- ^ The x resolution
                         -> SamplingStrategy
                         -> PerspectiveCamera
 createPerspectiveCamera xRes yRes orig lookAt up fov strategy
-    | xRes < 1 || yRes < 1  = error "The resolution of a camera cannot be less than 1"
-    | fov <= 0 || fov >= pi = error "The field of view must lie between 0 and pi"
-    | l == 0                = error "The lookat vector and up vector are colinear"
-    | otherwise = PerspectiveCamera xRes yRes invX invY orig u v w width height strategy
-    where
-        invX = (1.0 / fromIntegral xRes)
-        invY = (1.0 / fromIntegral yRes)
-        cr = lookAt `cross` up
-        l = norm cr
-        w = normalize $ negateV lookAt
-        u = (1/l) *^ cr
-        v = w `cross` u
-        width = 2 * tan (fov/2)
-        height = (fromIntegral yRes * width) * invX
+  | xRes < 1 || yRes < 1 = error "The resolution of a camera cannot be less than 1"
+  | fov <= 0 || fov >= pi = error "The field of view must lie between 0 and pi"
+  | l == 0 = error "The lookat vector and up vector are colinear"
+  | otherwise = PerspectiveCamera xRes yRes invX invY orig u v w width height strategy
+  where
+    invX = 1.0 / fromIntegral xRes
+    invY = 1.0 / fromIntegral yRes
+    cr = lookAt `cross` up
+    l = norm cr
+    w = normalize $ negateV lookAt
+    u = (1 / l) *^ cr
+    v = w `cross` u
+    width = 2 * tan (fov / 2)
+    height = (fromIntegral yRes * width) * invX
 
 
 -- | Generate the rays through this camera.
 generateRays :: (MonadRandom m) => PerspectiveCamera -> Array D Ix2 (m [Ray Double])
 generateRays (PerspectiveCamera xRes yRes invXRes invYRes orig u v w width height strategy) =
-    makeArrayR D Par (Sz (yRes :. xRes)) generateCell
-        where
-            pixelWidth = width*invXRes
-            pixelHeight = height*invYRes
-            generateCell = (\(x, y) -> map (uncurry generateRay) <$> getSample strategy x y pixelWidth pixelHeight) . pixelCenter
-            pixelCenter (r :. c) = (centerX, centerY)
-                where
-                    centerX = pixelWidth*((fromIntegral c) - (fromIntegral (xRes - 1))/2)
-                    centerY = pixelHeight*((fromIntegral (yRes - 1 - r)) - (fromIntegral (yRes - 1))/2)
-            generateRay uCoo vCoo = createRay orig direc
-                where
-                    direc = uCoo*^u ^+^ vCoo*^v ^-^ w
+  makeArrayR D Par (Sz (yRes :. xRes)) generateCell
+  where
+    pixelWidth = width * invXRes
+    pixelHeight = height * invYRes
+    generateCell =
+        (\(x, y) -> map (uncurry generateRay) <$> getSample strategy x y pixelWidth pixelHeight) . pixelCenter
+    pixelCenter (r :. c) = (centerX, centerY)
+      where
+        centerX = pixelWidth * (fromIntegral c - fromIntegral (xRes - 1) / 2)
+        centerY = pixelHeight * (fromIntegral (yRes - 1 - r) - fromIntegral (yRes - 1) / 2)
+    generateRay uCoo vCoo = createRay orig direc
+      where
+        direc = uCoo *^ u ^+^ vCoo *^ v ^-^ w
 
 
 instance Camera PerspectiveCamera where
-    rayTrace camera tracer world = do
-        let rays = generateRays camera
-        sequenceRand Par $ (`A.map` rays) $ \getRayCell -> do
-            rayCell <- getRayCell
-            cell <- mapM (traceRay tracer world) rayCell
-            return $ averageV cell
+  rayTrace camera tracer world =
+    let rays = generateRays camera in
+      (`A.map` rays) $ \getRayCell -> do
+        rayCell <- getRayCell
+        cell <- mapM (traceRay tracer world) rayCell
+        return $ averageV cell

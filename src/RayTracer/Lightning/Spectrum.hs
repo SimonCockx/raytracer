@@ -13,7 +13,9 @@ module RayTracer.Lightning.Spectrum
     , gammaCorrect
     , inverseGammaCorrect
     , gammaCorrectImage
+    , gammaCorrectImageM
     , inverseGammaCorrectImage
+    , inverseGammaCorrectImageM
     , rgb
     , gray
     , zeroV, (^+^), (^-^), (*^), (^*), (^/), sumV
@@ -22,11 +24,14 @@ module RayTracer.Lightning.Spectrum
 
 import qualified Data.Massiv.Array.IO as MIO
 import Data.Massiv.Array as A
-import qualified Graphics.ColorSpace as C
+import qualified Graphics.Pixel.ColorSpace as C
+import qualified Graphics.Color.Space.RGB as M
 import Data.VectorSpace
+import RayTracer.Random
+import GHC.IO.Unsafe (unsafePerformIO)
 
-type Pixel = C.Pixel C.RGB C.Word8
-type Image = MIO.Image S C.RGB C.Word8
+type Pixel = C.Pixel M.SRGB C.Word8
+type Image = MIO.Image S M.SRGB C.Word8
 type SpectralImage spec = A.Array D Ix2 spec
 
 class (VectorSpace a, Double ~ Scalar a, Eq a) => Spectrum a where
@@ -46,8 +51,10 @@ averageV spectra = sumSpec^/count
     where
         (sumSpec, count) = foldr (\spec (sSpec, c) -> (sSpec ^+^ spec, c+1)) (zeroV, 0::Double) spectra
 
-toImage :: (Spectrum s) => SpectralImage s -> Image
-toImage = (computeAs S) . (A.map toPixel)
+toImage :: (Spectrum s) => WorkerStates Gen -> SpectralImage (RandM s) -> Image
+toImage gens specImg =
+  computeAs S $
+  unsafePerformIO (A.mapWS gens (\specM gen -> return $ toPixel $ evalRand specM gen) specImg :: IO (Array B Ix2 Pixel))
 
 rgb :: Double -> Double -> Double -> Pixel
 rgb r g b = C.PixelRGB (toWord r) (toWord g) (toWord b)
@@ -71,8 +78,14 @@ inverseGammaCorrect (RGB r g b) = RGB (r**gamma) (g**gamma) (b**gamma)
 gammaCorrectImage :: SpectralImage RGB -> SpectralImage RGB
 gammaCorrectImage = A.map gammaCorrect
 
+gammaCorrectImageM :: (MonadRandom m) => SpectralImage (m RGB) -> SpectralImage (m RGB)
+gammaCorrectImageM = A.map $ fmap gammaCorrect
+
 inverseGammaCorrectImage :: SpectralImage RGB -> SpectralImage RGB
 inverseGammaCorrectImage = A.map inverseGammaCorrect
+
+inverseGammaCorrectImageM :: (MonadRandom m) => SpectralImage (m RGB) -> SpectralImage (m RGB)
+inverseGammaCorrectImageM = A.map $ fmap inverseGammaCorrect
 
 
 newtype Gray = Gray Double
@@ -120,7 +133,7 @@ instance AdditiveGroup ContinuousSpectrum where
     (ContinuousSpectrum i1) ^+^ (ContinuousSpectrum i2) = ContinuousSpectrum (\l -> i1 l + i2 l)
 
     negateV ZeroContinuousSpectrum = ZeroContinuousSpectrum
-    negateV (ContinuousSpectrum i) = ContinuousSpectrum (\l -> negate $ i l)
+    negateV (ContinuousSpectrum i) = ContinuousSpectrum (negate . i)
 
     ZeroContinuousSpectrum ^-^ spec = negateV spec
     spec ^-^ ZeroContinuousSpectrum = spec

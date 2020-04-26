@@ -3,7 +3,7 @@ module VectorSpec where
 import Test.Hspec
 import Test.Hspec.SmallCheck
 
-import Vector
+import RayTracer.Geometry.Vector
 import Data.Massiv.Array as A
 
 spec :: Spec

@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -w #-}
-
 module RayTracer.Geometry.Shape
     ( Shape (..)
     , closest
@@ -10,8 +8,7 @@ module RayTracer.Geometry.Shape
     , closestIntersection
     , innerIntersect
     , innerNumberOfIntersectionTests
-    , AABB (minimumPoint, maximumPoint, centroid)
-    , pattern AABB
+    , AABB (..)
     , spaceAABB
     , createAABB
     , getArea
@@ -63,8 +60,8 @@ instance Shape ShapeWrapper where
     boundedNode (ShapeWrapper shape) = boundedNode shape
 
 instance Shape () where
-    intersect ray () = Nothing
-    numberOfIntersectionTests ray () = 0
+    intersect _ () = Nothing
+    numberOfIntersectionTests _ () = 0
     boundingBox () = createAABB (pure 1) (pure (-1))
     boundedNode = UnboundedNode
 
@@ -100,7 +97,7 @@ instance Shape BoundedShapeNode where
         Just _  -> innerNumberOfIntersectionTests ray volume
     boundingBox (ShapeBranchNode box _) = box
     boundingBox (ShapeNode box _) = box
-    boundingBox (UnboundedNode box) = spaceAABB
+    boundingBox (UnboundedNode _) = spaceAABB
     boundingBox (TransformedShapeNode box _ _) = box
     boundedNode = id
 
@@ -115,11 +112,10 @@ innerIntersect ray (ShapeBranchNode _ innerVolumes) = intersectVts volumesTs
         getT ((t, _, _), _) = t
         volumesTs = sortOn getT
                   $ mapMaybe (\innerVolume -> fmap (, innerVolume) $ intersect ray $ boundingBox innerVolume) innerVolumes
-        test vts t = takeWhile ((<t) . getT) vts
         intersectVts [] = Nothing
         intersectVts ((_, innerVolume):vts) = case innerIntersect ray innerVolume of
             Nothing     -> intersectVts vts
-            Just intersection@(t, n, uvw) -> foldr (\vt acc -> closestIntersection acc $ innerIntersect ray $ snd vt) (Just intersection) $ takeWhile ((<t) . getT) vts
+            Just intersection@(t, _, _) -> foldr (\vt acc -> closestIntersection acc $ innerIntersect ray $ snd vt) (Just intersection) $ takeWhile ((<t) . getT) vts
 
 innerNumberOfIntersectionTests :: Ray Double -> BoundedShapeNode -> Int
 innerNumberOfIntersectionTests ray (ShapeNode _ innerShape) = numberOfIntersectionTests ray innerShape
@@ -183,15 +179,12 @@ instance (Shape a) => Shape (Transformed a) where
             innerNode = boundedNode shape
 
 
-pattern AABB :: Point Double -> Point Double -> Point Double -> AABB
-pattern AABB minp maxp cent <- AABBox minp maxp cent
-
-data AABB = AABBox {minimumPoint :: Point Double, maximumPoint :: Point Double, centroid :: Point Double}
+data AABB = AABB {minimumPoint :: Point Double, maximumPoint :: Point Double, centroid :: Point Double}
     deriving (Show)
 spaceAABB :: AABB
-spaceAABB = AABBox (pure (-1/0)) (pure (1/0)) (pure 0)
+spaceAABB = AABB (pure (-1/0)) (pure (1/0)) (pure 0)
 createAABB :: Point Double -> Point Double -> AABB
-createAABB minP maxP = AABBox minP maxP $ minP <+^ (maxP <-> minP)^/2
+createAABB minP maxP = AABB minP maxP $ minP <+^ (maxP <-> minP)^/2
 getArea :: AABB -> Double
 getArea (AABB minP maxP _) = 2*(dx*dy + dy*dz + dz*dx)
     where

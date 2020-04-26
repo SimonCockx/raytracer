@@ -10,3 +10,4 @@
 - Test path-tracing met achtergrondkleur
 - `follow ray t` komt te vaak voor -> voeg toe in `Intersection` OF maak nieuw object met `(oppervlaktepunt, normaal(, uvw))`. (is `t` wel nodig? Zorgt ook voor dubbelzinnigheden na transformaties... -> kijk eens goed na of dit een vaste betekenis (eg afstand) heeft)
 - Add light source sampling strategy
+- Rename existentials to `Any{type}`
