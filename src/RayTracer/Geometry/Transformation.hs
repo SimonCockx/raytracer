@@ -1,6 +1,7 @@
 module RayTracer.Geometry.Transformation
     ( Transformation
     , Transformable (..)
+    , inverseTransform
     , Transformed (..)
     , innerTransform
     , inverse
@@ -30,7 +31,6 @@ data Matrix a = Matrix a a a a
 transpose :: Matrix a -> Matrix a
 transpose (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 m41 m42 m43 m44) =
     Matrix m11 m21 m31 m41 m12 m22 m32 m42 m13 m23 m33 m43 m14 m24 m34 m44
-{-# INLINE transpose #-}
 
 transformMatrix :: (Num a) => Matrix a -> Matrix a -> Matrix a
 transformMatrix (Matrix l11 l12 l13 l14 l21 l22 l23 l24 l31 l32 l33 l34 l41 l42 l43 l44) (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 m41 m42 m43 m44) =
@@ -52,7 +52,6 @@ transformMatrix (Matrix l11 l12 l13 l14 l21 l22 l23 l24 l31 l32 l33 l34 l41 l42 
         n42 = l41 * m12 + l42 * m22 + l43 * m32 + l44 * m42
         n43 = l41 * m13 + l42 * m23 + l43 * m33 + l44 * m43
         n44 = l41 * m14 + l42 * m24 + l43 * m34 + l44 * m44
-{-# INLINE transformMatrix #-}
 
 transformVector :: (Num a) => Matrix a -> Vector a -> Vector a
 transformVector (Matrix m11 m12 m13 _ m21 m22 m23 _ m31 m32 m33 _ _ _ _ _) (Vector x y z) = Vector x' y' z'
@@ -60,7 +59,6 @@ transformVector (Matrix m11 m12 m13 _ m21 m22 m23 _ m31 m32 m33 _ _ _ _ _) (Vect
         x' = m11*x + m12*y + m13*z
         y' = m21*x + m22*y + m23*z
         z' = m31*x + m32*y + m33*z
-{-# INLINE transformVector #-}
 
 transformPoint :: (Num a) => Matrix a -> Point a -> Point a
 transformPoint (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 _ _ _ _) (Point x y z) = Point x' y' z'
@@ -68,7 +66,6 @@ transformPoint (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 _ _ _ _) 
         x' = m11*x + m12*y + m13*z + m14
         y' = m21*x + m22*y + m23*z + m24
         z' = m31*x + m32*y + m33*z + m34
-{-# INLINE transformPoint #-}
 
 -- | A type that represents a transformation.
 data Transformation a = Transformation (Matrix a) (Matrix a)
@@ -79,17 +76,17 @@ class Transformable v a where
     transform :: Transformation a -- ^ The transformation
               -> v                -- ^ The transformable to be transformed
               -> v                -- ^ The transformed transformable
-    -- | Inversely transform a transformable with the given transformation.
-    inverseTransform :: Transformation a -- ^ The transformation
-                     -> v                -- ^ The transformable to be inversely transformed
-                     -> v                -- ^ The inversely transformed transformable
-    inverseTransform t = transform $ inverse t
-    {-# INLINE inverseTransform #-}
+
+-- | Inversely transform a transformable with the given transformation.
+inverseTransform :: (Transformable v a)
+                 => Transformation a -- ^ The transformation
+                 -> v                -- ^ The transformable to be inversely transformed
+                 -> v                -- ^ The inversely transformed transformable
+inverseTransform t = transform $ inverse t
 
 
 instance (Num a1, a1 ~ a2) => Transformable (Matrix a1) a2 where
     transform (Transformation mat _) = transformMatrix mat
-    {-# INLINE transform #-}
 instance (Num a1, a1 ~ a2) => Transformable (Transformation a1) a2 where
     transform (Transformation mat1 inv1) (Transformation mat2 inv2) = Transformation mat inv
         where
@@ -101,25 +98,21 @@ instance (Num a1, a1 ~ a2) => Transformable (Point a1) a2 where
     transform (Transformation mat _) = transformPoint mat
 instance (Transformable t a) => Transformable [t] a where
     transform trans = map (transform trans)
-    {-# INLINE transform #-}
 
 
 data Transformed a = Transformed (Transformation Double) a
     deriving (Show)
 instance Transformable (Transformed a) Double where
     transform t (Transformed t' s) = Transformed (t `transform` t') s
-    {-# INLINE transform #-}
 
 innerTransform :: Transformation Double -> Transformed a -> Transformed a
 innerTransform tr (Transformed tr' s) = Transformed (tr' `transform` tr) s
-{-# INLINE innerTransform #-}
 
 
 -- | Invert a transformation.
 inverse :: Transformation a -- ^ The transformation to invert
         -> Transformation a -- ^ The inverted transformation
 inverse (Transformation mat inv) = Transformation inv mat
-{-# INLINE inverse #-}
 
 -- | Transform a normal with the given transformation and normalize the result.
 normalTransform :: (Floating a, Eq a, AdditiveGroup a)
@@ -127,13 +120,11 @@ normalTransform :: (Floating a, Eq a, AdditiveGroup a)
                 -> Vector a         -- ^ The normal to be transformed
                 -> Vector a         -- ^ The transformed normal
 normalTransform (Transformation _ inv) = normalize . transformVector (transpose inv)
-{-# INLINE normalTransform #-}
 inverseNormalTransform :: (Floating a, Eq a, AdditiveGroup a)
                        => Transformation a -- ^ The transformation
                        -> Vector a         -- ^ The normal to be transformed inversely
                        -> Vector a         -- ^ The inversely transformed normal
 inverseNormalTransform t = normalTransform $ inverse t
-{-# INLINE inverseNormalTransform #-}
 
 
 identity :: (Num a) => Transformation a

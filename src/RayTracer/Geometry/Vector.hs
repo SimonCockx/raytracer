@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module RayTracer.Geometry.Vector
     ( Vector (..)
     , Point (..)
@@ -81,7 +79,7 @@ instance Foldable Point where
 instance Traversable Point where
     traverse f (Point x y z) = fromList <$> traverse f [x, y, z]
         where
-            fromList [a, b, c] = Point a b c
+            fromList [a, b, c] = Point a b c -- TODO: kan dit beter?
             fromList _ = error "Not implemented..."
             {-# INLINE fromList #-}
     {-# INLINE traverse #-}
@@ -95,18 +93,18 @@ toPoint (Vector x y z) = Point x y z
 {-# INLINE toPoint #-}
 
 cosAngle :: (Floating a, AdditiveGroup a) => Vector a -> Vector a -> a
-cosAngle v1 v2 = (v1 <.> v2)/(sqrt (normSqr v1 * normSqr v2))
+cosAngle v1 v2 = (v1 <.> v2) / sqrt (normSqr v1 * normSqr v2)
 {-# INLINE cosAngle #-}
 
 -- | Calculate the squared norm of a given vector.
-normSqr :: (Num a, AdditiveGroup a) 
+normSqr :: (Num a, AdditiveGroup a)
         => Vector a -- ^ The vector to calculate the squared norm of
         -> a        -- ^ The squared norm
 normSqr v = v <.> v
 {-# INLINE normSqr #-}
 
 -- | Calculate the norm of a given vector.
-norm :: (Floating a, AdditiveGroup a) 
+norm :: (Floating a, AdditiveGroup a)
      => Vector a -- ^ The vector to calculate the norm of
      -> a        -- ^ The norm
 norm = sqrt . normSqr

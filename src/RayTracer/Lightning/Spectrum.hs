@@ -54,7 +54,7 @@ averageV spectra = sumSpec^/count
 toImage :: (Spectrum s) => WorkerStates Gen -> SpectralImage (RandM s) -> Image
 toImage gens specImg =
   computeAs S $
-  unsafePerformIO (A.mapWS gens (\specM gen -> return $ toPixel $ evalRand specM gen) specImg :: IO (Array B Ix2 Pixel))
+  unsafePerformIO (A.mapWS gens (\specM gen -> toPixel <$> evalRandT specM gen) specImg :: IO (Array B Ix2 Pixel))
 
 rgb :: Double -> Double -> Double -> Pixel
 rgb r g b = C.PixelRGB (toWord r) (toWord g) (toWord b)

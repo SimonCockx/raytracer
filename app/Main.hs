@@ -7,9 +7,9 @@ import qualified Data.Massiv.Array as A
 
 import Data.Time
 import System.IO
-import System.Random.SplitMix
 import Scenes
 import Control.Scheduler (getWorkerId)
+import Control.Monad (liftM2)
 
 seeds :: [Seed]
 seeds = [11, 23, 55, 83, 145, 250, 954, 1010]

@@ -202,7 +202,7 @@ traceRouletteReflectanceRay alpha ray world = do
 instance (Spectrum s) => RayTracer RussianRoulettePathTracer s where
     traceRay (RussianRoulettePathTracer alpha) world ray = do
         (emit, spec) <- traceRouletteReflectanceRay alpha ray world
-        return $ gammaCorrect $ toRGB $ (emit ^+^ spec)
+        return $ gammaCorrect $ toRGB $ emit ^+^ spec
 
 
 
