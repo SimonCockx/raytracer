@@ -3,6 +3,7 @@
 module RayTracer.Core.Scene
     ( Scene (..)
     , render
+    , gammaCorrectedRender
     ) where
 
 import RayTracer.Core.World
@@ -18,5 +19,8 @@ data Scene s = forall cam. (Camera cam, Show cam) => Scene {getWorld :: World s,
 instance Show (Scene s) where
     show (Scene world cam) = "Scene (" ++ show world ++ ") (" ++ show cam ++ ")"
 
-render :: (RayTracer r s) => WorkerStates Gen -> r -> Scene s -> Image
+render :: (RayTracer r s, Show s) => WorkerStates Gen -> r -> Scene s -> Image
 render gens tracer (Scene world camera) = toImage gens $ rayTrace camera tracer world
+
+gammaCorrectedRender :: (RayTracer r s, Show s) => WorkerStates Gen -> r -> Scene s -> Image
+gammaCorrectedRender gens tracer (Scene world camera) = toImage gens $ gammaCorrectImageM $ rayTrace camera tracer world

@@ -22,6 +22,21 @@ hsl2rgb hue s l = case hi of
         t = l - span
         u = l - f*span
 
+testCamera :: PerspectiveCamera
+testCamera = createPerspectiveCamera 1 1 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) 0.01 (RegularGrid 32)
+
+createTestScene :: IO (Scene Gray)
+createTestScene = do
+  let square = translate 0 0 (-1 :: Double) `transform` createDisc      (Vector 0 0   1 ) 2
+      light  = translate 0 0 ( 1 :: Double) `transform` createAreaLight (Vector 0 0 (-1)) 2 2 (Gray 2)
+
+      world = createWorld [ simpleObject square
+                          , SceneLight light
+                          ]
+                          [ Light light
+                          ]
+  return $ Scene world testCamera
+
 camera1 :: PerspectiveCamera
 camera1 = createPerspectiveCamera 600 400 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
 

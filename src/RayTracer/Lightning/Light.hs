@@ -29,7 +29,7 @@ data Light s = forall a. (LightSource a s, Show a) => Light a
 instance Show (Light s) where
     show (Light l) = show l
 instance Shape (Light s) where
-    intersect ray (Light shape) = intersect ray shape
+    intersect ray (Light shape) = ray `intersect` shape
     numberOfIntersectionTests ray (Light shape) = numberOfIntersectionTests ray shape
     boundingBox (Light shape) = boundingBox shape
     boundedNode (Light shape) = boundedNode shape
@@ -45,8 +45,8 @@ instance (LightSource l s) => LightSource (Transformed l) s where
             sample = generateSample strat light (t `inverseTransform` p)
 
 
-data AmbientLight s = AmbientLight s
-    deriving (Show)
+newtype AmbientLight s = AmbientLight s
+  deriving (Show)
 instance (Show s) => Shape (AmbientLight s) where
     intersect _ _ = Nothing
     numberOfIntersectionTests _ _ = 0
@@ -70,7 +70,7 @@ instance (Show s) => Shape (PointLight s) where
     boundingBox _ = createAABB (Point 1 1 1) (pure (-1))
     boundedNode = UnboundedNode
 instance (Spectrum s1, s1 ~ s2, Show s1) => LightSource (PointLight s1) s2 where
-    getRadiance (PointLight center spectrum) _ other = spectrum ^/ (normSqr $ other <-> center)
+    getRadiance (PointLight center spectrum) _ other = spectrum ^/ normSqr (other <-> center)
     generateSample _ light@(PointLight center _) point = return [(center, getRadiance light center point)]
 
 
@@ -87,7 +87,7 @@ instance (Show s) => Shape (LongRangePointLight s) where
     boundingBox _ = createAABB (Point 1 1 1) (pure (-1))
     boundedNode = UnboundedNode
 instance (Spectrum s1, s1 ~ s2, Show s1) => LightSource (LongRangePointLight s1) s2 where
-    getRadiance (LongRangePointLight center spectrum) _ other = spectrum ^/ (norm $ other <-> center)
+    getRadiance (LongRangePointLight center spectrum) _ other = spectrum ^/ norm (other <-> center)
     generateSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light center point)]
 
 
@@ -105,19 +105,14 @@ instance (Show s) => Shape (AreaLight s) where
     boundedNode (AreaLight _ _ rect _) = boundedNode rect
 
 getRadianceDividedByDistSqr :: (Spectrum s) => AreaLight s -> Point Double -> Point Double -> s
-getRadianceDividedByDistSqr (AreaLight width height _ spec) pl pt = spec ^* (width * height * abs xCos / distSqr)
+getRadianceDividedByDistSqr (AreaLight width height _ spec) pl pt =  spec ^* (width * height * abs xCos / distSqr)
         where
             dp = pt <-> pl
             distSqr = normSqr dp
             d = dp ^/ sqrt distSqr
             Vector xCos _ _ = d
 instance (Spectrum s1, s1 ~ s2, Show s1) => LightSource (AreaLight s1) s2 where
-    getRadiance (AreaLight width height _ spec) pl pt = spec ^* (width * height * abs xCos)
-        where
-            dp = pt <-> pl
-            distSqr = normSqr dp
-            d = dp ^/ sqrt distSqr
-            Vector xCos _ _ = d
+    getRadiance (AreaLight _ _ _ spec) _ _ = spec
     generateSample strat light@(AreaLight width height _ _) point = do
         rOffsets <- getSample strat 0 0 width height
         let points = map (\(rz, ry) -> Point 0 ry rz) rOffsets

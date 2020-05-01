@@ -62,7 +62,7 @@ class Material a s where
             newRay = Ray (shadowPoint (follow ray t) normal) newDirec
         return $ ReflectingHit emit (pi *^ brdf newDirec (direction ray)) newRay
     shadowReflect :: (MonadRandom m) => a -> Ray Double -> Intersection -> SamplingStrategy -> [Light s] -> m (ShadowHit s)
-    default shadowReflect :: (MonadRandom m, Spectrum s) => a -> Ray Double -> Intersection -> SamplingStrategy -> [Light s] -> m (ShadowHit s)
+    default shadowReflect :: (MonadRandom m, Spectrum s, Show s) => a -> Ray Double -> Intersection -> SamplingStrategy -> [Light s] -> m (ShadowHit s)
     shadowReflect mat ray intersection strat lights = ShadowHit emit . concat <$> samplesPerLight
         where
             InspectingHit emit brdf (t, normal, _) = inspect mat ray intersection
@@ -77,7 +77,7 @@ class Material a s where
                 return $ map reflSample samples
 
 
-instance (Spectrum s1, s1 ~ s2) => Material (Light s1) s2 where
+instance (Spectrum s1, s1 ~ s2, Show s1) => Material (Light s1) s2 where
     inspect l ray intersection@(t, _, _) = InspectingHit (getRadiance l (follow ray t) (origin ray)) blackBRDF intersection
 
 
@@ -115,7 +115,7 @@ diffuseBRDF reflectance _ _ = (1/pi) *^ reflectance
 
 newtype Diffuse s = Diffuse s
     deriving (Show)
-instance (Spectrum s1, s1 ~ s2) => Material (Diffuse s1) s2 where
+instance (Spectrum s1, s1 ~ s2, Show s1) => Material (Diffuse s1) s2 where
     inspect (Diffuse reflectance) _ = uniform $ diffuseBRDF reflectance
 
 
@@ -137,7 +137,7 @@ type TextureMap s = Array B Ix2 s
 data DiffuseTexture s = DiffuseTexture (TextureMap s) (Vector Double -> (Double, Double))
 instance Show (DiffuseTexture s) where
     show _ = "DiffuseTexture"
-instance (Spectrum s1, s1 ~ s2) => Material (DiffuseTexture s1) s2 where
+instance (Spectrum s1, s1 ~ s2, Show s1) => Material (DiffuseTexture s1) s2 where
     inspect (DiffuseTexture textureMap proj) _ intersection@(_, _, uvw) = uniform (diffuseBRDF $ evaluate' textureMap (r :. c)) intersection
         where
             Sz (rows :. columns) = size textureMap
@@ -154,7 +154,7 @@ readTextureMap path = do
 newtype ProceduralDiffuseTexture s = ProceduralDiffuseTexture (Vector Double -> s)
 instance Show (ProceduralDiffuseTexture s) where
     show _ = "ProceduralDiffuseTexture"
-instance (Spectrum s1, s1 ~ s2) => Material (ProceduralDiffuseTexture s1) s2 where
+instance (Spectrum s1, s1 ~ s2, Show s1) => Material (ProceduralDiffuseTexture s1) s2 where
     inspect (ProceduralDiffuseTexture toReflectance) _ intersection@(_, _, uvw) = uniform (diffuseBRDF $ toReflectance uvw) intersection
 
 

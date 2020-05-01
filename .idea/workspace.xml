@@ -2,15 +2,15 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="65b4893b-c665-4b37-b0d0-da0a6a65dd17" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TODO.md" beforeDir="false" afterPath="$PROJECT_DIR$/TODO.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/Main.hs" beforeDir="false" afterPath="$PROJECT_DIR$/app/Main.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/Scenes.hs" beforeDir="false" afterPath="$PROJECT_DIR$/app/Scenes.hs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/RayTracer/Core/RayTracer.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Core/RayTracer.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/RayTracer/Core/Sampling.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Core/Sampling.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/RayTracer/Geometry/Transformation.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Geometry/Transformation.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/RayTracer/Geometry/Vector.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Geometry/Vector.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/RayTracer/Lightning/Spectrum.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Lightning/Spectrum.hs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/RayTracer/Random.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Random.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/RayTracer/Core/Scene.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Core/Scene.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/RayTracer/Core/SceneObject.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Core/SceneObject.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/RayTracer/Lightning/Light.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Lightning/Light.hs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/RayTracer/Lightning/Material.hs" beforeDir="false" afterPath="$PROJECT_DIR$/src/RayTracer/Lightning/Material.hs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -37,7 +37,7 @@
     <property name="project.structure.side.proportion" value="0.0" />
     <property name="settings.editor.selected.configurable" value="Errors" />
   </component>
-  <component name="RunManager" selected="Haskell Stack.Run">
+  <component name="RunManager" selected="Haskell Stack.Run optimized">
     <configuration name="profile" type="BatchConfigurationType" factoryName="Batch" temporary="true">
       <module name="RayTracer" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -47,7 +47,18 @@
       <option name="PARAMETERS" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="Run" type="HaskellStackConfigurationType" factoryName="Haskell Stack Runner" singleton="false" show_console_on_std_err="false" show_console_on_std_out="false">
+    <configuration name="run" type="BatchConfigurationType" factoryName="Batch" temporary="true">
+      <module name="RayTracer" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="WORKING_DIRECTORY" value="C:\Users\Simon\Desktop\Haskell\raytracer" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SCRIPT_NAME" value="run.bat" />
+      <option name="PARAMETERS" value="" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run optimized" type="HaskellStackConfigurationType" factoryName="Haskell Stack Runner" singleton="false" show_console_on_std_err="false" show_console_on_std_out="false">
       <module name="RayTracer" />
       <option name="allowRunningInParallel" value="true" />
       <option name="executable" value="RayTracer-exe" />
@@ -60,10 +71,12 @@
     </configuration>
     <list>
       <item itemvalue="Batch.profile" />
-      <item itemvalue="Haskell Stack.Run" />
+      <item itemvalue="Batch.run" />
+      <item itemvalue="Haskell Stack.Run optimized" />
     </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Batch.run" />
         <item itemvalue="Batch.profile" />
       </list>
     </recent_temporary>
@@ -81,7 +94,9 @@
       <workItem from="1587917437999" duration="1006000" />
       <workItem from="1587920301790" duration="1297000" />
       <workItem from="1587921819453" duration="10808000" />
-      <workItem from="1588014162188" duration="1918000" />
+      <workItem from="1588014162188" duration="9480000" />
+      <workItem from="1588237125059" duration="23425000" />
+      <workItem from="1588327641084" duration="9539000" />
     </task>
     <servers />
   </component>
@@ -93,34 +108,38 @@
       <screen x="0" y="0" width="1536" height="824" />
     </state>
     <state x="601" y="305" width="392" height="312" key="#Haskell/0.0.1536.824@0.0.1536.824" timestamp="1587923020804" />
-    <state x="286" y="76" key="#com.intellij.execution.impl.EditConfigurationsDialog" timestamp="1587929544721">
+    <state x="286" y="76" key="#com.intellij.execution.impl.EditConfigurationsDialog" timestamp="1588237498482">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state x="286" y="76" key="#com.intellij.execution.impl.EditConfigurationsDialog/0.0.1536.824@0.0.1536.824" timestamp="1587929544721" />
+    <state x="286" y="76" key="#com.intellij.execution.impl.EditConfigurationsDialog/0.0.1536.824@0.0.1536.824" timestamp="1588237498482" />
     <state x="489" y="214" key="#com.intellij.fileTypes.FileTypeChooser" timestamp="1588013023017">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
     <state x="489" y="214" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1536.824@0.0.1536.824" timestamp="1588013023017" />
+    <state x="449" y="148" key="#com.intellij.openapi.updateSettings.impl.PluginUpdateInfoDialog" timestamp="1588327656336">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="449" y="148" key="#com.intellij.openapi.updateSettings.impl.PluginUpdateInfoDialog/0.0.1536.824@0.0.1536.824" timestamp="1588327656336" />
     <state x="508" y="241" key="#com.intellij.tools.ToolEditorDialog" timestamp="1587920239527">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
     <state x="508" y="241" key="#com.intellij.tools.ToolEditorDialog/0.0.1536.824@0.0.1536.824" timestamp="1587920239527" />
-    <state width="1493" height="215" key="GridCell.Tab.0.bottom" timestamp="1588013699365">
+    <state width="1493" height="188" key="GridCell.Tab.0.bottom" timestamp="1588339762675">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state width="1493" height="215" key="GridCell.Tab.0.bottom/0.0.1536.824@0.0.1536.824" timestamp="1588013699365" />
-    <state width="1493" height="215" key="GridCell.Tab.0.center" timestamp="1588013699365">
+    <state width="1493" height="188" key="GridCell.Tab.0.bottom/0.0.1536.824@0.0.1536.824" timestamp="1588339762675" />
+    <state width="1493" height="188" key="GridCell.Tab.0.center" timestamp="1588339762675">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state width="1493" height="215" key="GridCell.Tab.0.center/0.0.1536.824@0.0.1536.824" timestamp="1588013699365" />
-    <state width="1493" height="215" key="GridCell.Tab.0.left" timestamp="1588013699365">
+    <state width="1493" height="188" key="GridCell.Tab.0.center/0.0.1536.824@0.0.1536.824" timestamp="1588339762675" />
+    <state width="1493" height="188" key="GridCell.Tab.0.left" timestamp="1588339762675">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state width="1493" height="215" key="GridCell.Tab.0.left/0.0.1536.824@0.0.1536.824" timestamp="1588013699365" />
-    <state width="1493" height="215" key="GridCell.Tab.0.right" timestamp="1588013699365">
+    <state width="1493" height="188" key="GridCell.Tab.0.left/0.0.1536.824@0.0.1536.824" timestamp="1588339762675" />
+    <state width="1493" height="188" key="GridCell.Tab.0.right" timestamp="1588339762675">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state width="1493" height="215" key="GridCell.Tab.0.right/0.0.1536.824@0.0.1536.824" timestamp="1588013699365" />
+    <state width="1493" height="188" key="GridCell.Tab.0.right/0.0.1536.824@0.0.1536.824" timestamp="1588339762675" />
     <state x="349" y="147" key="IDE.errors.dialog" timestamp="1587931606002">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
@@ -133,5 +152,9 @@
       <screen x="0" y="0" width="1536" height="824" />
     </state>
     <state x="634" y="146" key="com.intellij.tools.ToolSelectDialog.dimensionServiceKey/0.0.1536.824@0.0.1536.824" timestamp="1587920240334" />
+    <state x="478" y="147" width="579" height="530" key="find.popup" timestamp="1588338991617">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="478" y="147" width="579" height="530" key="find.popup/0.0.1536.824@0.0.1536.824" timestamp="1588338991617" />
   </component>
 </project>

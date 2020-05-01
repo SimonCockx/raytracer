@@ -66,7 +66,7 @@ instance Shape (SceneObject s) where
     boundingBox (SceneLight obj) = boundingBox obj
     boundedNode (SceneObject obj) = boundedNode obj
     boundedNode (SceneLight obj) = boundedNode obj
-instance (Spectrum s1, s1 ~ s2) => Object (SceneObject s1) s2 where
+instance (Spectrum s1, s1 ~ s2, Show s1) => Object (SceneObject s1) s2 where
     findHit ray (SceneObject obj) = findHit ray obj
     findHit ray (SceneLight light) = do
         intersection <- intersect ray light

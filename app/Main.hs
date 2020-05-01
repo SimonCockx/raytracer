@@ -18,7 +18,7 @@ getWorkerGens :: IO (WorkerStates Gen)
 getWorkerGens = initWorkerStates Par $ createGen . (seeds !!) . getWorkerId
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 300 300 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/1.5) (RegularGrid 4)
+camera = createPerspectiveCamera 300 300 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 32)
 
 createScene :: IO (Scene RGB)
 createScene = do
@@ -45,42 +45,29 @@ createScene = do
     return $ Scene (insertBoundingBoxes world) camera
 
 
-data AnyRayTracer s = forall a. (RayTracer a s) => AnyRayTracer a
-instance (Spectrum s1, s1 ~ s2) => RayTracer (AnyRayTracer s1) s2 where
-    traceRay (AnyRayTracer t) = traceRay t
+rayTracer = DirectionalMaxDepthPathTracer 3
 
-rayTracer = RussianRoulettePathTracer 0.7
-
-tracers :: [AnyRayTracer RGB]
-tracers = [ AnyRayTracer $ DirectLightningTracer $ Random 1
-          , AnyRayTracer $ SpecificDepthPathTracer 0
-          , AnyRayTracer $ SpecificDepthPathTracer 1
-          , AnyRayTracer $ SpecificDepthPathTracer 2
-          , AnyRayTracer $ SpecificDepthPathTracer 3
-          , AnyRayTracer $ RussianRoulettePathTracer 0.5
-          ]
-
-renderFast :: (Spectrum s) => IO (Scene s) -> IO Image
+renderFast :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 renderFast getScene = do
     scene <- getScene
     gens <- getWorkerGens
     let fastScene = Scene (insertBoundingBoxes $ getWorld scene)
                           (createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1))
-    return $ render gens (DirectLightningTracer $ Random 1) fastScene
+    return $ gammaCorrectedRender gens (DirectLightningTracer $ Random 1) fastScene
 
 justRender :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 justRender getScene = do
     scene <- getScene
     gens <- getWorkerGens
-    let sceneWithMyCamera = Scene (getWorld scene) camera
-    return $ render gens rayTracer sceneWithMyCamera
+    -- let sceneWithMyCamera = Scene (getWorld scene) camera
+    return $ render gens rayTracer scene
 
 justRenderWith :: (Spectrum s, Show s, RayTracer a s) => a -> IO (Scene s) -> IO Image
 justRenderWith tracer getScene = do
     scene <- getScene
     gens <- getWorkerGens
-    let sceneWithMyCamera = Scene (getWorld scene) camera
-    return $ render gens tracer sceneWithMyCamera
+    -- let sceneWithMyCamera = Scene (getWorld scene) camera
+    return $ render gens tracer scene
 
 
 save :: Image -> IO ()
@@ -128,13 +115,7 @@ main = do
     let getScene = createScene
     -- getScene >>= print
     -- (show <$> getScene) >>= writeFile "test.txt"
-    -- image <- justRenderWith (SpecificDepthPathTracer 0) getScene
-    -- saveAs "depth0" image
-    -- image <- justRenderWith (SpecificDepthPathTracer 1) getScene
-    -- saveAs "depth1" image
-    -- image <- justRenderWith (SpecificDepthPathTracer 2) getScene
-    -- saveAs "depth2" image
-    -- image <- justRenderWith (SpecificDepthPathTracer 3) getScene
-    -- saveAs "depth3" image
-    image <- justRenderWith (MaxDepthPathTracer 3) getScene
-    saveAs "depthMax" image
+    Scene world _ <- getScene
+    gens <- getWorkerGens
+    let image = toImage gens $ gammaCorrectImageM $ rayTrace camera rayTracer world
+    saveAs "roulette0.7" image
