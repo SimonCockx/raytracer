@@ -9,7 +9,7 @@ import RayTracer.Lightning
 import RayTracer.Geometry
 
 type Background s = Vector Double -> s
-data World s = forall a. (Object a s, Show a) => World {worldRoot :: a, worldLights :: [Light s], worldBackground :: Background s}
+data World s = forall a. (Object a s, Show a) => World {worldRoot :: !a, worldLights :: ![Light s], worldBackground :: !(Background s)}
 
 createWorld :: (Spectrum s, Object a s) => a -> [Light s] -> World s
 createWorld root lights = createWorldWithColor root lights black

@@ -29,7 +29,7 @@ createBox :: Double -> Double -> Double -> Transformed AABB
 createBox x y z = Transformed (scale x y z) $ createAABB (pure (-0.5)) $ pure 0.5
 
 
-data Plane = Plane (Point Double) (Vector Double)
+data Plane = Plane !(Point Double) !(Vector Double)
     deriving (Show)
 
 instance Shape Plane where
@@ -170,7 +170,7 @@ intersectTriangle ray p0 _ _ normal betaVector gammaVector
         o = origin ray
         l = direction ray
 
-data Triangle = Triangle (Point Double) (Point Double) (Point Double) (Vector Double) (Vector Double) (Vector Double)
+data Triangle = Triangle !(Point Double) !(Point Double) !(Point Double) !(Vector Double) !(Vector Double) !(Vector Double)
     deriving (Show)
 createTriangle :: (Point Double) -> (Point Double) -> (Point Double) -> Triangle
 createTriangle p0 p1 p2 = Triangle p0 p1 p2 n betaVector gammaVector
@@ -189,10 +189,10 @@ instance Transformable Triangle Double where
     transform t (Triangle p0 p1 p2 _ _ _) = createTriangle (transform t p0) (transform t p1) (transform t p2)
 
 
-data Vertex = Vertex (Point Double) (Vector Double) (Vector Double)
+data Vertex = Vertex !(Point Double) !(Vector Double) !(Vector Double)
     deriving (Show)
 
-data MeshTriangle = MeshTriangle Vertex Vertex Vertex (Vector Double) (Vector Double) (Vector Double)
+data MeshTriangle = MeshTriangle !Vertex !Vertex !Vertex !(Vector Double) !(Vector Double) !(Vector Double)
     deriving (Show)
 createMeshTriangle :: Vertex -> Vertex -> Vertex -> MeshTriangle
 createMeshTriangle v0 v1 v2 = MeshTriangle v0 v1 v2 n betaVector gammaVector

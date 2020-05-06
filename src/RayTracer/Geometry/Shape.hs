@@ -50,7 +50,7 @@ class (Show a) => Shape a where
     boundedNode :: a -> BoundedShapeNode
     boundedNode shape = ShapeNode (boundingBox shape) shape
 
-data ShapeWrapper = forall a. (Shape a) => ShapeWrapper a
+data ShapeWrapper = forall a. (Shape a) => ShapeWrapper !a
 instance Show ShapeWrapper where
     show (ShapeWrapper shape) = "ShapeWrapper (" ++ show shape ++ ")"
 instance Shape ShapeWrapper where
@@ -77,10 +77,10 @@ instance (Shape a) => Shape (DoubleSided a) where
 instance (Transformable a b) => Transformable (DoubleSided a) b where
     transform tr (DoubleSided shape) = DoubleSided (transform tr shape)
 
-data BoundedShapeNode = ShapeBranchNode AABB [BoundedShapeNode]
-                      | forall a. (Shape a, Show a) => ShapeNode AABB a
-                      | forall a. (Shape a, Show a) => UnboundedNode a
-                      | TransformedShapeNode AABB (Transformation Double) BoundedShapeNode
+data BoundedShapeNode = ShapeBranchNode !AABB ![BoundedShapeNode]
+                      | forall a. (Shape a, Show a) => ShapeNode !AABB !a
+                      | forall a. (Shape a, Show a) => UnboundedNode !a
+                      | TransformedShapeNode !AABB !(Transformation Double) !BoundedShapeNode
 instance Show BoundedShapeNode where
     show (ShapeBranchNode box branches) = "ShapeBranchNode (" ++ show box ++ ") " ++ show branches
     show (ShapeNode box shape) = "ShapeNode (" ++ show box ++ ") (" ++ show shape ++ ")"
@@ -179,7 +179,7 @@ instance (Shape a) => Shape (Transformed a) where
             innerNode = boundedNode shape
 
 
-data AABB = AABB {minimumPoint :: Point Double, maximumPoint :: Point Double, centroid :: Point Double}
+data AABB = AABB {minimumPoint :: !(Point Double), maximumPoint :: !(Point Double), centroid :: !(Point Double)}
     deriving (Show)
 spaceAABB :: AABB
 spaceAABB = AABB (pure (-1/0)) (pure (1/0)) (pure 0)

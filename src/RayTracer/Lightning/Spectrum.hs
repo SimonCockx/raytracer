@@ -4,12 +4,15 @@ module RayTracer.Lightning.Spectrum
     ( Pixel
     , Image
     , SpectralImage
+    , SpectralImageR
     , Spectrum (..)
     , toPixel
     , Gray (..)
     , RGB (..)
     , ContinuousSpectrum (..)
+    , computeImage
     , toImage
+    , computeSpectralImageAs
     , gammaCorrect
     , inverseGammaCorrect
     , gammaCorrectImage
@@ -28,11 +31,11 @@ import qualified Graphics.Pixel.ColorSpace as C
 import qualified Graphics.Color.Space.RGB as M
 import Data.VectorSpace
 import RayTracer.Random
-import GHC.IO.Unsafe (unsafePerformIO)
 
 type Pixel = C.Pixel M.SRGB C.Word8
 type Image = MIO.Image S M.SRGB C.Word8
-type SpectralImage spec = A.Array D Ix2 spec
+type SpectralImageR r spec = A.Array r Ix2 spec
+type SpectralImage spec = SpectralImageR D spec
 
 class (VectorSpace a, Double ~ Scalar a, Eq a) => Spectrum a where
     fromPixel :: Pixel -> a
@@ -51,16 +54,26 @@ averageV spectra = sumSpec^/count
     where
         (sumSpec, count) = foldr (\spec (sSpec, c) -> (sSpec ^+^ spec, c+1)) (zeroV, 0::Double) spectra
 
-toImage :: (Spectrum s) => WorkerStates Gen -> SpectralImage (RandM s) -> Image
-toImage gens specImg =
-  computeAs S $
-  unsafePerformIO (A.mapWS gens (\specM gen -> toPixel <$> evalRandT specM gen) specImg :: IO (Array B Ix2 Pixel))
+computeImage :: (Spectrum s) => WorkerStates Gen -> SpectralImage (RandM s) -> IO Image
+computeImage gens specImgM =
+  computeAs S <$> (A.mapWS gens (\specM gen -> toPixel <$> evalRandT specM gen) specImgM :: IO (Array B Ix2 Pixel))
+
+toImage :: (Spectrum s, Source r Ix2 s) => SpectralImageR r s -> Image
+toImage specImg = computeAs S $ A.map toPixel specImg
+
+computeSpectralImageAs :: (Spectrum s, Mutable r Ix2 s) => r -> WorkerStates Gen -> SpectralImage (RandM s) -> IO (SpectralImageR r s)
+computeSpectralImageAs _ gens = A.mapWS gens evalRandT
 
 rgb :: Double -> Double -> Double -> Pixel
-rgb r g b = C.PixelRGB (toWord r) (toWord g) (toWord b)
+rgb r g b = let (r', g', b') = clamp r g b in C.PixelRGB (toWord r') (toWord g') (toWord b')
 
 gray :: Double -> Pixel
 gray x = rgb x x x
+
+clamp :: Double -> Double -> Double -> (Double, Double, Double)
+clamp r g b
+  | r <= 1 && g <= 1 && b <= 1 = (r, g, b)
+  | otherwise = let m = max r $ max g b in (r/m, g/m, b/m)
 
 toWord :: Double -> C.Word8
 toWord = (fromIntegral :: Int -> C.Word8) . round . (255*) . min 1 . max 0
@@ -75,13 +88,13 @@ gammaCorrect (RGB r g b) = RGB (r**(1/gamma)) (g**(1/gamma)) (b**(1/gamma))
 inverseGammaCorrect :: RGB -> RGB
 inverseGammaCorrect (RGB r g b) = RGB (r**gamma) (g**gamma) (b**gamma)
 
-gammaCorrectImage :: SpectralImage RGB -> SpectralImage RGB
+gammaCorrectImage :: (Source r Ix2 RGB) => SpectralImageR r RGB -> SpectralImage RGB
 gammaCorrectImage = A.map gammaCorrect
 
 gammaCorrectImageM :: (MonadRandom m) => SpectralImage (m RGB) -> SpectralImage (m RGB)
 gammaCorrectImageM = A.map $ fmap gammaCorrect
 
-inverseGammaCorrectImage :: SpectralImage RGB -> SpectralImage RGB
+inverseGammaCorrectImage :: (Source r Ix2 RGB) => SpectralImageR r RGB -> SpectralImage RGB
 inverseGammaCorrectImage = A.map inverseGammaCorrect
 
 inverseGammaCorrectImageM :: (MonadRandom m) => SpectralImage (m RGB) -> SpectralImage (m RGB)
@@ -89,7 +102,7 @@ inverseGammaCorrectImageM = A.map $ fmap inverseGammaCorrect
 
 
 newtype Gray = Gray Double
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 deriving instance Num Gray
 deriving instance AdditiveGroup Gray
 deriving instance VectorSpace Gray
@@ -100,8 +113,8 @@ instance Spectrum Gray where
     toRGB (Gray x) = RGB x x x
 
 
-data RGB = RGB Double Double Double
-    deriving (Show, Eq)
+data RGB = RGB !Double !Double !Double
+    deriving (Show, Eq, Read)
 instance AdditiveGroup RGB where
     zeroV = RGB 0.0 0.0 0.0
     (RGB r1 g1 b1) ^+^ (RGB r2 g2 b2) = RGB (r1 + r2) (g1 + g2) (b1 + b2)
@@ -118,7 +131,7 @@ instance Spectrum RGB where
 
 
 data ContinuousSpectrum = ZeroContinuousSpectrum
-                        | ContinuousSpectrum (Double -> Double)
+                        | ContinuousSpectrum !(Double -> Double)
 instance Show ContinuousSpectrum where
     show ZeroContinuousSpectrum = "ZeroContinuousSpectrum"
     show (ContinuousSpectrum _) = "ContinuousSpectrum"

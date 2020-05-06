@@ -24,7 +24,7 @@ class (Shape a) => LightSource a s where
     
     generateSample :: (MonadRandom m) => SamplingStrategy -> a -> Point Double -> m [LightSample s]
 
-data Light s = forall a. (LightSource a s, Show a) => Light a
+data Light s = forall a. (LightSource a s, Show a) => Light !a
 
 instance Show (Light s) where
     show (Light l) = show l
@@ -61,8 +61,8 @@ data PointLight s
     -- | A point light with specified position and radiance.
     --   The intensity diminishes with 1/(squared distance).
     = PointLight 
-        (Point Double) -- ^ The position of the light.
-        s              -- ^ The radiance of the light at distance 1.
+        !(Point Double) -- ^ The position of the light.
+        !s              -- ^ The radiance of the light at distance 1.
     deriving (Show)
 instance (Show s) => Shape (PointLight s) where
     intersect _ _ = Nothing
@@ -78,8 +78,8 @@ data LongRangePointLight s
     -- | A point light with specified position and radiance that has a longer range than a regular point light.
     --   The intensity diminishes with 1/distance.
     = LongRangePointLight
-        (Point Double) -- ^ The position of the light.
-        s              -- ^ The radiance of the light at distance 1.
+        !(Point Double) -- ^ The position of the light.
+        !s              -- ^ The radiance of the light at distance 1.
     deriving (Show)
 instance (Show s) => Shape (LongRangePointLight s) where
     intersect _ _ = Nothing
@@ -91,7 +91,7 @@ instance (Spectrum s1, s1 ~ s2, Show s1) => LightSource (LongRangePointLight s1)
     generateSample _ light@(LongRangePointLight center _) point = return [(center, getRadiance light center point)]
 
 
-data AreaLight s = AreaLight Double Double (Transformed Rectangle) s
+data AreaLight s = AreaLight !Double !Double !(Transformed Rectangle) !s
     deriving (Show)
 
 createAreaLight :: Vector Double -> Double -> Double -> s -> Transformed (AreaLight s)

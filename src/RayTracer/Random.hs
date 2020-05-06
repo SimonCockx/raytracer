@@ -9,7 +9,7 @@ module RayTracer.Random
     ) where
 
 import System.Random
-import Control.Monad.Random.Lazy (RandT, liftRandT, runRandT, evalRandT, execRandT)
+import Control.Monad.Random.Strict (RandT, liftRandT, runRandT, evalRandT, execRandT)
 import Data.Word (Word32)
 import qualified System.Random.MWC as MWC
 import Data.Vector (singleton)

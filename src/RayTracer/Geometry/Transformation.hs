@@ -22,10 +22,10 @@ module RayTracer.Geometry.Transformation
 
 import RayTracer.Geometry.Vector
 
-data Matrix a = Matrix a a a a
-                       a a a a
-                       a a a a
-                       a a a a
+data Matrix a = Matrix !a !a !a !a
+                       !a !a !a !a
+                       !a !a !a !a
+                       !a !a !a !a
     deriving (Show)
 
 transpose :: Matrix a -> Matrix a
@@ -68,7 +68,7 @@ transformPoint (Matrix m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34 _ _ _ _) 
         z' = m31*x + m32*y + m33*z + m34
 
 -- | A type that represents a transformation.
-data Transformation a = Transformation (Matrix a) (Matrix a)
+data Transformation a = Transformation !(Matrix a) !(Matrix a)
     deriving (Show)
 
 class Transformable v a where
@@ -100,7 +100,7 @@ instance (Transformable t a) => Transformable [t] a where
     transform trans = map (transform trans)
 
 
-data Transformed a = Transformed (Transformation Double) a
+data Transformed a = Transformed !(Transformation Double) !a
     deriving (Show)
 instance Transformable (Transformed a) Double where
     transform t (Transformed t' s) = Transformed (t `transform` t') s

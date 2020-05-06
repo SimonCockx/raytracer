@@ -14,9 +14,9 @@ data Ray a
     -- | Construct a ray with given origin and direction.
     = Ray {
         -- | Return the origin of the ray.
-        origin :: Point a,
+        origin :: !(Point a),
         -- | Return the direction of the ray.
-        direction :: Vector a}
+        direction :: !(Vector a)}
     deriving (Show)
 
 instance (Floating a, Eq a) => Transformable (Ray a) a where

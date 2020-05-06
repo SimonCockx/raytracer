@@ -17,10 +17,10 @@ import Data.VectorSpace hiding ((<.>))
 import qualified Data.VectorSpace as V ((<.>))
 
 -- | A type that represents a vector.
-data Vector a = Vector a a a
+data Vector a = Vector !a !a !a
     deriving (Eq, Show)
 -- | A type that represents a point.
-data Point a = Point a a a
+data Point a = Point !a !a !a
     deriving (Eq, Show)
 
 

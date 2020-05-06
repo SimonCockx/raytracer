@@ -30,7 +30,7 @@ class RayTracer a s where
     traceRay :: (MonadRandom m) => a -> World s -> Ray Double -> m RGB
 
 
-data AnyRayTracer s = forall a. (RayTracer a s) => AnyRayTracer a
+data AnyRayTracer s = forall a. (RayTracer a s) => AnyRayTracer !a
 instance (Spectrum s1, s1 ~ s2) => RayTracer (AnyRayTracer s1) s2 where
     traceRay (AnyRayTracer t) = traceRay t
 
@@ -54,8 +54,8 @@ data LinearDepthRayTracer =
     --   The minimum depth will be mapped to white and the maximum depth will be mapped to black.
     --   All depths inbetween are interpolated linearly to grayscales. 
     LinearDepthRayTracer
-        Double -- ^ The minimum depth that will be mapped to white
-        Double -- ^ The maximum depth that will be mapped to black
+        !Double -- ^ The minimum depth that will be mapped to white
+        !Double -- ^ The maximum depth that will be mapped to black
 
 
 instance RayTracer LinearDepthRayTracer s where

@@ -50,7 +50,9 @@ dependencies:
 default-extensions:
 - MultiParamTypeClasses
 - FlexibleInstances
+- FlexibleContexts
 - TypeFamilies
+- TypeOperators
 - ExistentialQuantification
 - PatternSynonyms
 - DefaultSignatures
@@ -62,6 +64,8 @@ default-extensions:
 - NamedFieldPuns
 - GADTs
 - TypeSynonymInstances
+- ScopedTypeVariables
+- BangPatterns
 
 library:
   source-dirs: src

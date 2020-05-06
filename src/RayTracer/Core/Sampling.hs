@@ -8,9 +8,9 @@ import Control.Monad (replicateM)
 
 
 data SamplingStrategy 
-    = RegularGrid Int
-    | Random Int
-    | Stratified Int
+    = RegularGrid !Int
+    | Random !Int
+    | Stratified !Int
     deriving (Show)
 
 getSample :: (MonadRandom m) => SamplingStrategy -> Double -> Double -> Double -> Double -> m [(Double, Double)]

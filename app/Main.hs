@@ -2,14 +2,16 @@ module Main where
 
 import RayTracer
 import Data.Massiv.Array.IO hiding (Image, encode)
-import Data.Massiv.Array hiding (map, mapM, mapM_, zip)
+import Data.Massiv.Array hiding (map, mapM, mapM_, zip, forM_, foldlM_)
 import qualified Data.Massiv.Array as A
 
 import Data.Time
 import System.IO
 import Scenes
+import TracerIO
 import Control.Scheduler (getWorkerId)
-import Control.Monad (liftM2)
+import Control.Monad (liftM2, forM_, foldM_)
+import Data.VectorSpace (magnitudeSq)
 
 seeds :: [Seed]
 seeds = [11, 23, 55, 83, 145, 250, 954, 1010]
@@ -18,7 +20,7 @@ getWorkerGens :: IO (WorkerStates Gen)
 getWorkerGens = initWorkerStates Par $ createGen . (seeds !!) . getWorkerId
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 300 300 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 32)
+camera = createPerspectiveCamera 300 300 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
 
 createScene :: IO (Scene RGB)
 createScene = do
@@ -29,7 +31,7 @@ createScene = do
         top = translate 0 (16::Double) 0 `transform` createBox 50 2 50
         sphere = translate (4:: Double) 3 (-9.5) `transform` createSphere 2
         block = translate (-2::Double) 2 (-8.5) `transform` rotateY (pi/6::Double) `transform` createBox 4 6 4
-        light = translate 0 14.99 (-10::Double) `transform` createAreaLight (Vector 0 1 0) 4 4 (RGB 9 9 9)
+        light = translate 0 14.999999 (-10::Double) `transform` createAreaLight (Vector 0 1 0) 4 4 (RGB 9 9 9)
 
         world = createWorld [ withMaterial sphere Reflective
                       , simpleObject floor
@@ -45,7 +47,7 @@ createScene = do
     return $ Scene (insertBoundingBoxes world) camera
 
 
-rayTracer = DirectionalMaxDepthPathTracer 3
+rayTracer = MaxDepthPathTracer 3
 
 renderFast :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 renderFast getScene = do
@@ -53,21 +55,21 @@ renderFast getScene = do
     gens <- getWorkerGens
     let fastScene = Scene (insertBoundingBoxes $ getWorld scene)
                           (createPerspectiveCamera 300 200 (Point 0 0 0) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1))
-    return $ gammaCorrectedRender gens (DirectLightningTracer $ Random 1) fastScene
+    gammaCorrectedRender gens (DirectLightningTracer $ Random 1) fastScene
 
 justRender :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 justRender getScene = do
     scene <- getScene
     gens <- getWorkerGens
     -- let sceneWithMyCamera = Scene (getWorld scene) camera
-    return $ render gens rayTracer scene
+    render gens rayTracer scene
 
 justRenderWith :: (Spectrum s, Show s, RayTracer a s) => a -> IO (Scene s) -> IO Image
 justRenderWith tracer getScene = do
     scene <- getScene
     gens <- getWorkerGens
     -- let sceneWithMyCamera = Scene (getWorld scene) camera
-    return $ render gens tracer scene
+    render gens tracer scene
 
 
 save :: Image -> IO ()
@@ -94,28 +96,34 @@ displayBHVLayers depth name getScene = do
        timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
        putStrLn $ timeStamp ++ " - Iteration " ++ show n
        print $ processScene (extractBVHLayer n) scene
-       let img = render gens DiffuseRayTracer $ processScene (extractBVHLayer n) scene
+       img <- gammaCorrectedRender gens DiffuseRayTracer $ processScene (extractBVHLayer n) scene
        saveAs (name ++ show n) img)
     [0 .. depth]
 
+computeMSE :: (Source r Ix2 RGB) => SpectralImageR r RGB -> SpectralImageR r RGB -> Double
+computeMSE img1 img2 = (/count) $ A.sum $ A.zipWith (\c1 c2 -> let RGB r g b = c1 ^-^ c2 in r**2 + g**2 + b**2) img1 img2
+  where
+    Sz (r :. c) = size img1
+    count = fromIntegral $ r * c
 
-traceWithMaxDepth :: (Spectrum s, Show s) => Int -> IO (Scene s) -> IO Image
-traceWithMaxDepth depth getScene = do
-    scene <- getScene
-    gens <- getWorkerGens
-    let Scene world _ = scene -- TODO: get camera from scene instead (problem with existential types...)
-        contributions = (`map` [0..depth]) $ \d ->
-            inverseGammaCorrectImageM $ rayTrace camera (SpecificDepthPathTracer d) world
-        image = toImage gens $ gammaCorrectImageM $ foldr1 (A.zipWith (liftM2 (^+^))) contributions
-    return image
+computeRMSE :: (Source r Ix2 RGB) => SpectralImageR r RGB -> SpectralImageR r RGB -> Double
+computeRMSE img1 img2 = sqrt $ computeMSE img1 img2
 
+computeMeanRadiance :: (Source r Ix2 RGB) => SpectralImageR r RGB -> Double
+computeMeanRadiance img = (\(RGB r g b) -> (r + g + b)/count) $ A.foldlS (^+^) black img
+  where
+    Sz (r :. c) = size img
+    count = fromIntegral $ r * c
 
 main :: IO ()
 main = do
     let getScene = createScene
-    -- getScene >>= print
-    -- (show <$> getScene) >>= writeFile "test.txt"
     Scene world _ <- getScene
     gens <- getWorkerGens
-    let image = toImage gens $ gammaCorrectImageM $ rayTrace camera rayTracer world
-    saveAs "roulette0.7" image
+
+    forM_ [coloryScene, lightningScene, softShadowScene, diffuseCornell, reflectiveCornell] $ \getScene -> do
+      scene <- getScene
+      directLightningImage <- gammaCorrectedRender gens (MaxDepthPathTracer 0) scene
+      saveAs "directLight" directLightningImage
+      pathTracedImage <- gammaCorrectedRender gens (MaxDepthPathTracer 3) scene
+      saveAs "pathTraced" pathTracedImage

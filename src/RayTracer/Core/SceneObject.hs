@@ -51,8 +51,8 @@ instance (Show s, Spectrum s) => Object () s where
 
 
 
-data SceneObject s = forall a. (Object a s) => SceneObject a
-                   | forall l. (Shape l, LightSource l s) => SceneLight l
+data SceneObject s = forall a. (Object a s) => SceneObject !a
+                   | forall l. (Shape l, LightSource l s) => SceneLight !l
 
 instance Show (SceneObject s) where
     show (SceneObject obj) = "SceneObject (" ++ show obj ++ ")"
@@ -104,7 +104,7 @@ splitBoundingObjects box bvs
         areaZ = getArea leftBoxZ + getArea rightBoxZ
 
 
-data Surface a s = forall m. (Material m s, Show m) => Surface a m
+data Surface a s = forall m. (Material m s, Show m) => Surface !a !m
 
 instance (Show a) => Show (Surface a s) where
     show (Surface shape material) = "Surface (" ++ show shape ++ ") (" ++ show material ++ ")"
@@ -142,9 +142,9 @@ instance (Object a s) => Object (Transformed a) s where
                                                , Point maxx miny minz, Point maxx miny maxz
                                                , Point maxx maxy minz, Point maxx maxy maxz]
 
-data BoundedObjectNode s = ObjectBranchNode AABB [BoundedObjectNode s]
-                         | forall m. (Material m s, Show m) => MaterialNode m BoundedShapeNode
-                         | TransformedObjectNode AABB (Transformation Double) (BoundedObjectNode s)
+data BoundedObjectNode s = ObjectBranchNode !AABB ![BoundedObjectNode s]
+                         | forall m. (Material m s, Show m) => MaterialNode !m !BoundedShapeNode
+                         | TransformedObjectNode !AABB !(Transformation Double) !(BoundedObjectNode s)
 instance Show (BoundedObjectNode s) where
     show (ObjectBranchNode box branches) = "ObjectBranchNode (" ++ show box ++ ") " ++ show branches
     show (MaterialNode obj shapeNode) = "MaterialNode (" ++ show obj ++ ") (" ++ show shapeNode ++ ")"

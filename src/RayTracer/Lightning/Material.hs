@@ -39,14 +39,14 @@ type ReflectanceSample s = (Point Double, s)
 
 type BRDF s = Vector Double -> Vector Double -> s
 -- emit, brdf, shading intersection
-data InspectingHit s = InspectingHit s (BRDF s) Intersection
+data InspectingHit s = InspectingHit !s !(BRDF s) !Intersection
 instance (Show s) => Show (InspectingHit s) where
     show (InspectingHit emit _ int) = "InspectingHit (" ++ show emit ++ ") BRDF " ++ show int
 -- emit, reflectance, new ray
-data ReflectingHit s = ReflectingHit s s (Ray Double)
+data ReflectingHit s = ReflectingHit !s !s !(Ray Double)
     deriving (Show)
 -- emit, [reflectance*incomming radiance sample]
-data ShadowHit s = ShadowHit s [ReflectanceSample s]
+data ShadowHit s = ShadowHit !s ![ReflectanceSample s]
     deriving (Show)
 
 class Material a s where
@@ -81,7 +81,7 @@ instance (Spectrum s1, s1 ~ s2, Show s1) => Material (Light s1) s2 where
     inspect l ray intersection@(t, _, _) = InspectingHit (getRadiance l (follow ray t) (origin ray)) blackBRDF intersection
 
 
-data MaterialHit s = forall a. (Material a s) => MaterialHit a (Ray Double) Intersection 
+data MaterialHit s = forall a. (Material a s) => MaterialHit !a !(Ray Double) !Intersection
 inspectHit :: MaterialHit s -> InspectingHit s
 inspectHit (MaterialHit mat ray int) = inspect mat ray int
 reflectHit :: (MonadRandom m) => MaterialHit s -> m (ReflectingHit s)
@@ -134,7 +134,7 @@ blackMaterial = Diffuse black
 
 type TextureMap s = Array B Ix2 s
 
-data DiffuseTexture s = DiffuseTexture (TextureMap s) (Vector Double -> (Double, Double))
+data DiffuseTexture s = DiffuseTexture !(TextureMap s) !(Vector Double -> (Double, Double))
 instance Show (DiffuseTexture s) where
     show _ = "DiffuseTexture"
 instance (Spectrum s1, s1 ~ s2, Show s1) => Material (DiffuseTexture s1) s2 where

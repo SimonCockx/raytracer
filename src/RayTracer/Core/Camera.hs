@@ -26,17 +26,17 @@ class Camera a where
 -- | A type representing a camera with perspective.
 data PerspectiveCamera = 
     PerspectiveCamera {
-        xResolution :: Int,
-        yResolution :: Int,
-        invXResolution :: Double,
-        invYResolution :: Double,
-        origin :: Point Double,
-        uVec :: Vector Double,
-        vVec :: Vector Double,
-        wVec :: Vector Double,
-        getWidth :: Double,
-        getHeight :: Double,
-        samplingStrategy :: SamplingStrategy }
+        xResolution :: !Int,
+        yResolution :: !Int,
+        invXResolution :: !Double,
+        invYResolution :: !Double,
+        origin :: !(Point Double),
+        uVec :: !(Vector Double),
+        vVec :: !(Vector Double),
+        wVec :: !(Vector Double),
+        getWidth :: !Double,
+        getHeight :: !Double,
+        samplingStrategy :: !SamplingStrategy }
     deriving (Show)
 
 
