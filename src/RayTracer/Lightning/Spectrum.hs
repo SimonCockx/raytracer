@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies, UndecidableInstances, StandaloneDeriving, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module RayTracer.Lightning.Spectrum
     ( Pixel
@@ -31,6 +32,8 @@ import qualified Graphics.Pixel.ColorSpace as C
 import qualified Graphics.Color.Space.RGB as M
 import Data.VectorSpace
 import RayTracer.Random
+import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 
 type Pixel = C.Pixel M.SRGB C.Word8
 type Image = MIO.Image S M.SRGB C.Word8
@@ -61,7 +64,7 @@ computeImage gens specImgM =
 toImage :: (Spectrum s, Source r Ix2 s) => SpectralImageR r s -> Image
 toImage specImg = computeAs S $ A.map toPixel specImg
 
-computeSpectralImageAs :: (Spectrum s, Mutable r Ix2 s) => r -> WorkerStates Gen -> SpectralImage (RandM s) -> IO (SpectralImageR r s)
+computeSpectralImageAs :: (Mutable r Ix2 s) => r -> WorkerStates Gen -> SpectralImage (RandM s) -> IO (SpectralImageR r s)
 computeSpectralImageAs _ gens = A.mapWS gens evalRandT
 
 rgb :: Double -> Double -> Double -> Pixel
@@ -102,7 +105,7 @@ inverseGammaCorrectImageM = A.map $ fmap inverseGammaCorrect
 
 
 newtype Gray = Gray Double
-    deriving (Show, Eq, Read)
+    deriving (Show, Eq, Read, NFData)
 deriving instance Num Gray
 deriving instance AdditiveGroup Gray
 deriving instance VectorSpace Gray
@@ -114,7 +117,8 @@ instance Spectrum Gray where
 
 
 data RGB = RGB !Double !Double !Double
-    deriving (Show, Eq, Read)
+    deriving (Show, Eq, Read, Generic)
+instance NFData RGB where
 instance AdditiveGroup RGB where
     zeroV = RGB 0.0 0.0 0.0
     (RGB r1 g1 b1) ^+^ (RGB r2 g2 b2) = RGB (r1 + r2) (g1 + g2) (b1 + b2)

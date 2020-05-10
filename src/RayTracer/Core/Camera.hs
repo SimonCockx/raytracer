@@ -22,6 +22,17 @@ class Camera a where
              -> r                     -- ^ The ray tracer to use
              -> World s               -- ^ The world to trace
              -> SpectralImage (m RGB) -- ^ The resulting image
+    rayTraceWithError :: (MonadRandom m, RayTracer r s, Source b Ix2 RGB)
+                      => a
+                      -> r
+                      -> World s
+                      -> SpectralImageR b RGB
+                      -> SpectralImage (m (RGB, Double))
+    rayTraceWithPopulationError :: (MonadRandom m, RayTracer r s)
+                          => a
+                          -> r
+                          -> World s
+                          -> SpectralImage (m (RGB, Double))
 
 -- | A type representing a camera with perspective.
 data PerspectiveCamera = 
@@ -91,3 +102,23 @@ instance Camera PerspectiveCamera where
         rayCell <- getRayCell
         cell <- mapM (traceRay tracer world) rayCell
         return $ averageV cell
+  rayTraceWithError camera tracer world refImage =
+      let rays = generateRays camera in
+        A.zipWith (\getRayCell ref -> do
+          rayCell <- getRayCell
+          cell <- mapM (traceRay tracer world) rayCell
+          let n = fromIntegral $ length cell
+              avg = sumV cell ^/ n
+              -- TODO: waarom zorgt dit voor een geheugenlek als ik de `!` weglaat??
+              !err = sqrt $ (1 / n / n) * Prelude.sum (map (\rad -> let RGB r g b = rad ^-^ ref in r * r + g * g + b * b) cell)
+          return (avg, err)) rays refImage
+  rayTraceWithPopulationError camera tracer world =
+        let rays = generateRays camera in
+          (`A.map` rays) $ \getRayCell -> do
+            rayCell <- getRayCell
+            cell <- mapM (traceRay tracer world) rayCell
+            let n = fromIntegral $ length cell
+                avg = sumV cell ^/ n
+                -- TODO: waarom zorgt dit voor een geheugenlek als ik de `!` weglaat??
+                !err = sqrt $ (1 / (n - 1) / n) * Prelude.sum (map (\rad -> let RGB r g b = rad ^-^ avg in r * r + g * g + b * b) cell)
+            return (avg, err)

@@ -10,8 +10,12 @@ import System.IO
 import Scenes
 import TracerIO
 import Control.Scheduler (getWorkerId)
-import Control.Monad (liftM2, forM_, foldM_)
+import Control.Monad (liftM2, forM_, foldM_, when)
 import Data.VectorSpace (magnitudeSq)
+import System.CPUTime (getCPUTime)
+import Control.DeepSeq
+import Control.Exception (evaluate)
+import Data.List (intercalate)
 
 seeds :: [Seed]
 seeds = [11, 23, 55, 83, 145, 250, 954, 1010]
@@ -20,10 +24,10 @@ getWorkerGens :: IO (WorkerStates Gen)
 getWorkerGens = initWorkerStates Par $ createGen . (seeds !!) . getWorkerId
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 300 300 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (RegularGrid 1)
+camera = createPerspectiveCamera 100 100 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (Random 512)
 
-createScene :: IO (Scene RGB)
-createScene = do
+createCornellWithArea :: Double -> IO (Scene RGB)
+createCornellWithArea area = do
     let floor = translate 0 (0::Double) 0 `transform` createBox 50 2 50
         left  = translate (-8:: Double) 0 0 `transform` createBox 2 50 50
         right = translate (8::Double) 0 0 `transform` createBox 2 50 50
@@ -31,9 +35,10 @@ createScene = do
         top = translate 0 (16::Double) 0 `transform` createBox 50 2 50
         sphere = translate (4:: Double) 3 (-9.5) `transform` createSphere 2
         block = translate (-2::Double) 2 (-8.5) `transform` rotateY (pi/6::Double) `transform` createBox 4 6 4
-        light = translate 0 14.999999 (-10::Double) `transform` createAreaLight (Vector 0 1 0) 4 4 (RGB 9 9 9)
+        side = sqrt area
+        light = translate 0 14.999999 (-10::Double) `transform` createAreaLight (Vector 0 1 0) side side ((16/area) *^ RGB 9 9 9)
 
-        world = createWorld [ withMaterial sphere Reflective
+        world = createWorld [ withMaterial sphere (Diffuse $ RGB 1 1 0)
                       , simpleObject floor
                       , withMaterial left (Diffuse $ RGB 1 0 0)
                       , withMaterial back (Diffuse $ RGB 1 1 1)
@@ -47,7 +52,7 @@ createScene = do
     return $ Scene (insertBoundingBoxes world) camera
 
 
-rayTracer = MaxDepthPathTracer 3
+rayTracer = DirectionalMaxDepthPathTracer 3
 
 renderFast :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 renderFast getScene = do
@@ -115,15 +120,64 @@ computeMeanRadiance img = (\(RGB r g b) -> (r + g + b)/count) $ A.foldlS (^+^) b
     Sz (r :. c) = size img
     count = fromIntegral $ r * c
 
-main :: IO ()
-main = do
-    let getScene = createScene
-    Scene world _ <- getScene
-    gens <- getWorkerGens
+measureConvergence :: IO ()
+measureConvergence = do
+  let res = 150
+--  h <- openFile "out/measurements2/measurements.csv" WriteMode
+--  hPutStrLn h $ intercalate "," ["tracer", "area", "spp", "time", "rmse", "drmse"]
+--  hClose h
+  gens <- getWorkerGens
+  forM_ ([1,2..21] ++ [23,25]) $ \area -> do
+    Scene !world _ <- createCornellWithArea area
+    forM_
+      [ (AnyRayTracer $ MaxDepthPathTracer 1, "direct", AnyRayTracer $ MaxDepthPathTracer 1, 32)
+      , (AnyRayTracer $ DirectionalMaxDepthPathTracer 3, "directional", AnyRayTracer $ MaxDepthPathTracer 3, 32)
+      , (AnyRayTracer $ MaxDepthPathTracer 3, "hybride", AnyRayTracer $ MaxDepthPathTracer 3, 32)
+      ] $ \(tracer, tracerName, refTracer, refCount) -> do
+      let refCam =
+            createPerspectiveCamera
+              res
+              res
+              (Point 0 7 2)
+              (Vector 0 0 (-1))
+              (Vector 0 1 0)
+              (pi / 2)
+              (Random (refCount * refCount))
+          refId = tracerName ++ "-A" ++ show area ++ "-ref"
+      refImage <- computeSpectralImageAs B gens $ rayTrace refCam refTracer world
+      saveSpectralImage ("out/measurements2/measurement-" ++ refId ++ ".spectral") refImage
+      writeImage ("out/measurements2/" ++ refId ++ ".jpg") (toImage $ gammaCorrectImage refImage)
+      forM_ [2,4 .. 20] $ \n -> do
+        let spp = n * n
+            cam =
+              createPerspectiveCamera res res (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi / 2) (Random (n * n))
+            id = tracerName ++ "-A" ++ show area ++ "-spp" ++ show spp
+        start <- getCPUTime
+        -- TODO: hier zit nog ergens een geheugenlek in...
+        !specImageWithError <- computeSpectralImageAs B gens $ rayTraceWithError cam tracer world refImage
+        evaluate (rnf specImageWithError)
+        end <- getCPUTime
+        let specImage = computeAs B $ A.map fst specImageWithError
+            errImage = computeAs B $ A.map snd specImageWithError
+            errSpecImage = A.map (toRGB . Gray) errImage
+        saveSpectralImage ("out/measurements2/measurement-" ++ id ++ ".spectral") specImage
+        saveSpectralImage ("out/measurements2/measurement-" ++ id ++ "err.spectral") errImage
+        writeImage ("out/measurements2/" ++ id ++ ".jpg") (toImage $ gammaCorrectImage specImage)
+        writeImage ("out/measurements2/" ++ id ++ "err.jpg") (toImage $ gammaCorrectImage errSpecImage)
+        let time = fromIntegral (end - start) * 1.0e-12 :: Double
+            se = A.zipWith (\c1 c2 -> let RGB r g b = c1 ^-^ c2 in r ** 2 + g ** 2 + b ** 2) refImage specImage
+            sqErrSe = A.zipWith (\a b -> 4 * a * b * b) se errImage
+            count = let Sz (r :. c) = size se in fromIntegral $ r*c
+            mse = (/count) $ A.sum se
+            errMse = (/count) $ sqrt $ A.sum sqErrSe
+            rmse = sqrt mse
+            errRmse = errMse / (2*rmse)
+            measurement = force $! intercalate "," [tracerName, show area, show spp, show time, show rmse, show errRmse]
+        h <- openFile "out/measurements2/measurements.csv" AppendMode
+        hPutStrLn h measurement
+        hClose h
 
-    forM_ [coloryScene, lightningScene, softShadowScene, diffuseCornell, reflectiveCornell] $ \getScene -> do
-      scene <- getScene
-      directLightningImage <- gammaCorrectedRender gens (MaxDepthPathTracer 0) scene
-      saveAs "directLight" directLightningImage
-      pathTracedImage <- gammaCorrectedRender gens (MaxDepthPathTracer 3) scene
-      saveAs "pathTraced" pathTracedImage
+main :: IO ()
+main = 
+  measureConvergence
+  

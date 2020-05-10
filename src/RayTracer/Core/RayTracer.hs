@@ -158,7 +158,7 @@ traceShadowRay ray world = case findHit ray world of
 newtype SpecificDepthPathTracer = SpecificDepthPathTracer Int
 
 traceDepthReflectanceRay :: (MonadRandom m, Spectrum s) => Int -> Ray Double -> World s -> m (s, s)
-traceDepthReflectanceRay 0 ray world = traceShadowRay ray world
+traceDepthReflectanceRay 1 ray world = traceShadowRay ray world
 traceDepthReflectanceRay depth ray world = case findReflectingHit ray world of
     Nothing -> return (worldBackground world (direction ray), black)
     Just mHit -> do
@@ -176,7 +176,7 @@ instance (Spectrum s) => RayTracer SpecificDepthPathTracer s where
 newtype MaxDepthPathTracer = MaxDepthPathTracer Int
 
 traceMaxDepthReflectanceRay :: (MonadRandom m, Spectrum s) => Int -> Ray Double -> World s -> m (s, s)
-traceMaxDepthReflectanceRay 0 ray world = traceShadowRay ray world
+traceMaxDepthReflectanceRay 1 ray world = traceShadowRay ray world
 traceMaxDepthReflectanceRay depth ray world = case findHit ray world of
     Nothing -> return (worldBackground world (direction ray), black)
     Just matHit -> do

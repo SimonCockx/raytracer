@@ -39,6 +39,7 @@ dependencies:
 - unordered-containers
 - cassava
 - bytestring
+- deepseq
 # benchmarks
 - criterion
 # tests
