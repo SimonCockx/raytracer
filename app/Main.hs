@@ -38,7 +38,7 @@ createCornellWithArea area = do
         side = sqrt area
         light = translate 0 14.999999 (-10::Double) `transform` createAreaLight (Vector 0 1 0) side side ((16/area) *^ RGB 9 9 9)
 
-        world = createWorld [ withMaterial sphere (Diffuse $ RGB 1 1 0)
+        world = createWorld [ withMaterial sphere Reflective
                       , simpleObject floor
                       , withMaterial left (Diffuse $ RGB 1 0 0)
                       , withMaterial back (Diffuse $ RGB 1 1 1)
@@ -115,69 +115,41 @@ computeRMSE :: (Source r Ix2 RGB) => SpectralImageR r RGB -> SpectralImageR r
 computeRMSE img1 img2 = sqrt $ computeMSE img1 img2
 
 computeMeanRadiance :: (Source r Ix2 RGB) => SpectralImageR r RGB -> Double
-computeMeanRadiance img = (\(RGB r g b) -> (r + g + b)/count) $ A.foldlS (^+^) black img
+computeMeanRadiance img = (\(RGB r g b) -> sqrt (r**2 + g**2 + b**2)/count) $ A.foldlS (^+^) black img
   where
     Sz (r :. c) = size img
     count = fromIntegral $ r * c
 
-measureConvergence :: IO ()
-measureConvergence = do
+measureDepthConvergence :: IO ()
+measureDepthConvergence = do
   let res = 150
---  h <- openFile "out/measurements2/measurements.csv" WriteMode
---  hPutStrLn h $ intercalate "," ["tracer", "area", "spp", "time", "rmse", "drmse"]
---  hClose h
+      spp = 1024
+      cam = createPerspectiveCamera res res (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (Random spp)
+  h <- openFile "out/measurements_depth/measurements.csv" WriteMode
+  hPutStrLn h $ intercalate "," ["depth", "mean radiance"]
+  hClose h
   gens <- getWorkerGens
-  forM_ ([1,2..21] ++ [23,25]) $ \area -> do
-    Scene !world _ <- createCornellWithArea area
-    forM_
-      [ (AnyRayTracer $ MaxDepthPathTracer 1, "direct", AnyRayTracer $ MaxDepthPathTracer 1, 32)
-      , (AnyRayTracer $ DirectionalMaxDepthPathTracer 3, "directional", AnyRayTracer $ MaxDepthPathTracer 3, 32)
-      , (AnyRayTracer $ MaxDepthPathTracer 3, "hybride", AnyRayTracer $ MaxDepthPathTracer 3, 32)
-      ] $ \(tracer, tracerName, refTracer, refCount) -> do
-      let refCam =
-            createPerspectiveCamera
-              res
-              res
-              (Point 0 7 2)
-              (Vector 0 0 (-1))
-              (Vector 0 1 0)
-              (pi / 2)
-              (Random (refCount * refCount))
-          refId = tracerName ++ "-A" ++ show area ++ "-ref"
-      refImage <- computeSpectralImageAs B gens $ rayTrace refCam refTracer world
-      saveSpectralImage ("out/measurements2/measurement-" ++ refId ++ ".spectral") refImage
-      writeImage ("out/measurements2/" ++ refId ++ ".jpg") (toImage $ gammaCorrectImage refImage)
-      forM_ [2,4 .. 20] $ \n -> do
-        let spp = n * n
-            cam =
-              createPerspectiveCamera res res (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi / 2) (Random (n * n))
-            id = tracerName ++ "-A" ++ show area ++ "-spp" ++ show spp
-        start <- getCPUTime
-        -- TODO: hier zit nog ergens een geheugenlek in...
-        !specImageWithError <- computeSpectralImageAs B gens $ rayTraceWithError cam tracer world refImage
-        evaluate (rnf specImageWithError)
-        end <- getCPUTime
-        let specImage = computeAs B $ A.map fst specImageWithError
-            errImage = computeAs B $ A.map snd specImageWithError
-            errSpecImage = A.map (toRGB . Gray) errImage
-        saveSpectralImage ("out/measurements2/measurement-" ++ id ++ ".spectral") specImage
-        saveSpectralImage ("out/measurements2/measurement-" ++ id ++ "err.spectral") errImage
-        writeImage ("out/measurements2/" ++ id ++ ".jpg") (toImage $ gammaCorrectImage specImage)
-        writeImage ("out/measurements2/" ++ id ++ "err.jpg") (toImage $ gammaCorrectImage errSpecImage)
-        let time = fromIntegral (end - start) * 1.0e-12 :: Double
-            se = A.zipWith (\c1 c2 -> let RGB r g b = c1 ^-^ c2 in r ** 2 + g ** 2 + b ** 2) refImage specImage
-            sqErrSe = A.zipWith (\a b -> 4 * a * b * b) se errImage
-            count = let Sz (r :. c) = size se in fromIntegral $ r*c
-            mse = (/count) $ A.sum se
-            errMse = (/count) $ sqrt $ A.sum sqErrSe
-            rmse = sqrt mse
-            errRmse = errMse / (2*rmse)
-            measurement = force $! intercalate "," [tracerName, show area, show spp, show time, show rmse, show errRmse]
-        h <- openFile "out/measurements2/measurements.csv" AppendMode
-        hPutStrLn h measurement
-        hClose h
+  Scene !world _ <- createCornellWithArea 16
+  forM_ [0..15] $ \depth -> do
+    let refId = "d" ++ show depth
+    !specImage <- computeSpectralImageAs B gens $ rayTrace cam (SpecificDepthPathTracer depth) world
+    evaluate (rnf specImage)
+    saveSpectralImage ("out/measurements_depth/" ++ refId ++ ".spectral") specImage
+    writeImage ("out/measurements_depth/" ++ refId ++ ".jpg") $ toImage $ gammaCorrectImage specImage
+    let mean = computeMeanRadiance specImage
+    h <- openFile "out/measurements_depth/measurements.csv" AppendMode
+    hPutStrLn h $ intercalate "," [show depth, show mean]
+    hClose h
+
 
 main :: IO ()
-main = 
-  measureConvergence
+main = do
+  let res = 150
+      spp = 1024
+      cam = createPerspectiveCamera res res (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (Random spp)
+  gens <- getWorkerGens
+  Scene !world _ <- createCornellWithArea 16
+  !specImage <- computeSpectralImageAs B gens $ rayTrace cam (MaxDepthPathTracer 16) world
+  saveSpectralImage "out/measurements_depth/referentie.spectral" specImage
+  writeImage "out/measurements_depth/referentie.jpg" $ toImage $ gammaCorrectImage specImage
   
