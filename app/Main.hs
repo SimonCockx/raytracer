@@ -18,7 +18,7 @@ import Control.Exception (evaluate)
 import Data.List (intercalate)
 
 seeds :: [Seed]
-seeds = [11, 23, 55, 83, 145, 250, 954, 1010]
+seeds = [114, 231, 558, 834, 1452, 2509, 9540, 10105]
 
 getWorkerGens :: IO (WorkerStates Gen)
 getWorkerGens = initWorkerStates Par $ createGen . (seeds !!) . getWorkerId
@@ -206,8 +206,8 @@ measureCausticRMSE = do
   hClose h
   gens <- getWorkerGens
   Scene !world _ <- createScene
-    let refCam =
-          createPerspectiveCamera res res (Point 2 3 4) (Vector (-2.5) (-3) (-4)) (Vector 0 1 0) (pi/2) (Random (refCount*refCount))
+  let refCam =
+        createPerspectiveCamera res res (Point 2 3 4) (Vector (-2.5) (-3) (-4)) (Vector 0 1 0) (pi/2) (Random (refCount*refCount))
       refId = "ref"
   refImage <- computeSpectralImageAs B gens $ rayTrace refCam (MaxDepthPathTracer depth) world
   saveSpectralImage ("out/measurements_caustic/measurement-" ++ refId ++ ".spectral") refImage
@@ -236,7 +236,7 @@ measureCausticRMSE = do
         errMse = (/count) $ sqrt $ A.sum sqErrSe
         rmse = sqrt mse
         errRmse = errMse / (2*rmse)
-        measurement = intercalate "," [show alpha, show time, show rmse, show errRmse]
+        measurement = intercalate "," [show spp, show time, show rmse, show errRmse]
     h <- openFile "out/measurements_caustic/measurements.csv" AppendMode
     hPutStrLn h measurement
     hClose h
