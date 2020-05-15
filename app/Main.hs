@@ -196,6 +196,52 @@ measureRouletteRMSE = do
     hClose h
 
 
+measureCausticRMSE :: IO ()
+measureCausticRMSE = do
+  let res = 150
+      refCount = 128
+      depth = 10
+  h <- openFile "out/measurements_caustic/measurements.csv" WriteMode
+  hPutStrLn h $ intercalate "," ["spp", "time", "rmse", "drmse"]
+  hClose h
+  gens <- getWorkerGens
+  Scene !world _ <- createScene
+    let refCam =
+          createPerspectiveCamera res res (Point 2 3 4) (Vector (-2.5) (-3) (-4)) (Vector 0 1 0) (pi/2) (Random (refCount*refCount))
+      refId = "ref"
+  refImage <- computeSpectralImageAs B gens $ rayTrace refCam (MaxDepthPathTracer depth) world
+  saveSpectralImage ("out/measurements_caustic/measurement-" ++ refId ++ ".spectral") refImage
+  writeImage ("out/measurements_caustic/" ++ refId ++ ".jpg") (toImage $ gammaCorrectImage refImage)
+  forM_ [4, 8, 12, 16, 20, 24, 28, 32] $ \sCount -> do
+    let spp = sCount * sCount
+        cam =
+          createPerspectiveCamera res res (Point 2 3 4) (Vector (-2.5) (-3) (-4)) (Vector 0 1 0) (pi/2) (Random spp)
+        id = "spp" ++ show spp
+    start <- getCPUTime
+    !specImageWithError <- computeSpectralImageAs B gens $ rayTraceWithError cam (MaxDepthPathTracer depth) world refImage
+    evaluate (rnf specImageWithError)
+    end <- getCPUTime
+    let specImage = computeAs B $ A.map fst specImageWithError
+        errImage = computeAs B $ A.map snd specImageWithError
+        errSpecImage = A.map (toRGB . Gray) errImage
+    saveSpectralImage ("out/measurements_caustic/measurement-" ++ id ++ ".spectral") specImage
+    saveSpectralImage ("out/measurements_caustic/measurement-" ++ id ++ "err.spectral") errImage
+    writeImage ("out/measurements_caustic/" ++ id ++ ".jpg") (toImage $ gammaCorrectImage specImage)
+    writeImage ("out/measurements_caustic/" ++ id ++ "err.jpg") (toImage $ gammaCorrectImage errSpecImage)
+    let time = fromIntegral (end - start) * 1.0e-12 :: Double
+        se = A.zipWith (\c1 c2 -> let RGB r g b = c1 ^-^ c2 in r ** 2 + g ** 2 + b ** 2) refImage specImage
+        sqErrSe = A.zipWith (\a b -> 4 * a * b * b) se errImage
+        count = let Sz (r :. c) = size se in fromIntegral $ r*c
+        mse = (/count) $ A.sum se
+        errMse = (/count) $ sqrt $ A.sum sqErrSe
+        rmse = sqrt mse
+        errRmse = errMse / (2*rmse)
+        measurement = intercalate "," [show alpha, show time, show rmse, show errRmse]
+    h <- openFile "out/measurements_caustic/measurements.csv" AppendMode
+    hPutStrLn h measurement
+    hClose h
+
+
 main :: IO ()
 main = do
   gens <- getWorkerGens
