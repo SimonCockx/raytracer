@@ -10,6 +10,7 @@ module RayTracer.Core.RayTracer
     , DirectLightningTracer (..)
     , SpecificDepthPathTracer (..)
     , MaxDepthPathTracer (..)
+    , BranchingDirectionalMaxDepthPathTracer (..)
     , DirectionalMaxDepthPathTracer (..)
     , RussianRoulettePathTracer (..)
     , CumulativeRussianRoulettePathTracer (..)
@@ -22,6 +23,7 @@ import RayTracer.Lightning
 import RayTracer.Core.World
 import RayTracer.Core.SceneObject
 import RayTracer.Core.Sampling
+import Control.Monad (replicateM)
 
 
 -- | A class representing a ray tracer which can trace a ray through a world and return the resulting color.
@@ -193,6 +195,30 @@ traceMaxDepthReflectanceRay depth ray world = case findHit ray world of
 instance (Spectrum s) => RayTracer MaxDepthPathTracer s where
     traceRay (MaxDepthPathTracer depth) world ray = do
         (emit, spec) <- traceMaxDepthReflectanceRay depth ray world
+        return $ toRGB $ emit ^+^ spec
+
+
+-- | A type representing a path tracer that traces rays for a max depth and samples light at each intersection.
+data BranchingDirectionalMaxDepthPathTracer = BranchingDirectionalMaxDepthPathTracer Int Int
+
+traceBranchingDirectionalMaxDepthReflectanceRay :: (MonadRandom m, Spectrum s) => Int -> Int -> Ray Double -> World s -> m (s, s)
+traceBranchingDirectionalMaxDepthReflectanceRay 0 _ ray world = case findInspectingHit ray world of
+  Nothing -> return (worldBackground world (direction ray), black)
+  Just (InspectingHit emit _ _) -> return (black, emit)
+traceBranchingDirectionalMaxDepthReflectanceRay depth bf ray world = case findHit ray world of
+    Nothing -> return (worldBackground world (direction ray), black)
+    Just matHit -> do
+        let InspectingHit emit _ _ = inspectHit matHit
+        specs <- replicateM bf $ do
+          ReflectingHit _ refl newRay <- reflectHit matHit
+          (_, spec) <- traceBranchingDirectionalMaxDepthReflectanceRay (depth - 1) bf newRay world
+          return $ refl ^*^ spec
+        let tot = (^/ fromIntegral bf) $ foldl (^+^) black specs
+        return (black, emit ^+^ tot)
+
+instance (Spectrum s) => RayTracer BranchingDirectionalMaxDepthPathTracer s where
+    traceRay (BranchingDirectionalMaxDepthPathTracer depth bf) world ray = do
+        (emit, spec) <- traceBranchingDirectionalMaxDepthReflectanceRay depth bf ray world
         return $ toRGB $ emit ^+^ spec
 
 

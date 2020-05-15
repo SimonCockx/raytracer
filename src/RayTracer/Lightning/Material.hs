@@ -22,6 +22,7 @@ module RayTracer.Lightning.Material
     , readTextureMap
     , ProceduralDiffuseTexture (..)
     , Reflective (..)
+    , DiffuseReflective (..)
     ) where
 
 import RayTracer.Geometry
@@ -34,6 +35,7 @@ import qualified Data.Massiv.Array.IO as MIO
 import RayTracer.Random
 
 import Data.Maybe
+
 
 type ReflectanceSample s = (Point Double, s)
 
@@ -48,6 +50,7 @@ data ReflectingHit s = ReflectingHit !s !s !(Ray Double)
 -- emit, [reflectance*incomming radiance sample]
 data ShadowHit s = ShadowHit !s ![ReflectanceSample s]
     deriving (Show)
+
 
 class Material a s where
     inspect :: a -> Ray Double -> Intersection -> InspectingHit s
@@ -142,6 +145,7 @@ instance (Spectrum s1, s1 ~ s2, Show s1) => Material (DiffuseTexture s1) s2 wher
         where
             Sz (rows :. columns) = size textureMap
             (u, v) = proj uvw
+            -- TODO: fix bug: als x -1e-18 en y =1 is, dan is het resultaat 1
             rem' x y = x - y * fromIntegral (floor (x/y) :: Int)
             c = floor $ fromIntegral columns * (u `rem'` 1)
             r = rows - 1 - floor (fromIntegral rows * (v `rem'` 1))
@@ -175,4 +179,24 @@ instance (Spectrum s, Show s) => Material Reflective s where
                 (t, _, _) <- intersect newRay light
                 let pl = follow newRay t
                 return (pl, refl ^*^ getRadiance light pl (origin newRay))
+        return (emit, catMaybes samplesPerLight)
+
+
+newtype DiffuseReflective s = DiffuseReflective s
+  deriving (Show)
+instance (s1 ~ s2, Spectrum s1, Show s1) => Material (DiffuseReflective s1) s2 where
+    inspect _ _ = InspectingHit black blackBRDF
+    reflect (DiffuseReflective spec) ray intersection =
+        let InspectingHit emit _ (t, normal, _) = inspect Reflective ray intersection
+            direc = direction ray
+            newDirec = direc ^-^ (2 * direc <.> normal) *^ normal
+            newRay = Ray (shadowPoint (follow ray t) normal) newDirec
+        in
+            return $ ReflectingHit emit spec newRay
+    shadowReflect mat ray int _ lights = uncurry ShadowHit <$> do
+        ReflectingHit emit refl newRay <- reflect mat ray int
+        let samplesPerLight = (`map` lights) $ \light -> do
+              (t, _, _) <- intersect newRay light
+              let pl = follow newRay t
+              return (pl, refl ^*^ getRadiance light pl (origin newRay))
         return (emit, catMaybes samplesPerLight)

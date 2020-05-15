@@ -4,6 +4,7 @@ module RayTracer.Geometry.Shape
     , Intersection
     , ShapeWrapper (..)
     , DoubleSided (..)
+    , InsideOut (..)
     , BoundedShapeNode (..)
     , closestIntersection
     , innerIntersect
@@ -70,12 +71,24 @@ newtype DoubleSided a = DoubleSided a
 instance (Shape a) => Shape (DoubleSided a) where
     intersect ray (DoubleSided shape) = do
         (t, n, uvw) <- intersect ray shape
-        return $ (t, if direction ray <.> n > 0 then negateV n else n, uvw)
+        return (t, if direction ray <.> n > 0 then negateV n else n, uvw)
     numberOfIntersectionTests ray (DoubleSided shape) = numberOfIntersectionTests ray shape
     boundingBox (DoubleSided shape) = boundingBox shape
-    boundedNode (DoubleSided shape) = boundedNode shape
+    boundedNode (DoubleSided shape) = UnboundedNode $ DoubleSided $ boundedNode shape
 instance (Transformable a b) => Transformable (DoubleSided a) b where
     transform tr (DoubleSided shape) = DoubleSided (transform tr shape)
+
+newtype InsideOut a = InsideOut a
+  deriving (Show)
+instance (Shape a) => Shape (InsideOut a) where
+  intersect ray (InsideOut shape) = do
+    (t, n, uvw) <- intersect ray shape
+    return (t, negateV n, uvw)
+  numberOfIntersectionTests ray (InsideOut shape) = numberOfIntersectionTests ray shape
+  boundingBox (InsideOut shape) = boundingBox shape
+  boundedNode (InsideOut shape) = UnboundedNode $ InsideOut $ boundedNode shape
+instance (Transformable a b) => Transformable (InsideOut a) b where
+    transform tr (InsideOut shape) = InsideOut (transform tr shape)
 
 data BoundedShapeNode = ShapeBranchNode !AABB ![BoundedShapeNode]
                       | forall a. (Shape a, Show a) => ShapeNode !AABB !a

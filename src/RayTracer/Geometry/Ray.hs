@@ -44,7 +44,7 @@ follow (Ray o d) t = o <+^ t*^d
 
 -- | The offset for a shadow ray to remove self-shadow artefacts.
 selfShadowFactor :: Double
-selfShadowFactor = 1e-10
+selfShadowFactor = 1e-8
 
 shadowPoint :: Point Double -> Vector Double -> Point Double
 shadowPoint p n = p <+^ selfShadowFactor *^ n

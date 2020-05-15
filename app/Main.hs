@@ -24,35 +24,36 @@ getWorkerGens :: IO (WorkerStates Gen)
 getWorkerGens = initWorkerStates Par $ createGen . (seeds !!) . getWorkerId
 
 camera :: PerspectiveCamera
-camera = createPerspectiveCamera 100 100 (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (Random 512)
+camera = createPerspectiveCamera 500 300 (Point 2 3 4) (Vector (-2.5) (-3) (-4)) (Vector 0 1 0) (pi/2) (Stratified 48)
 
-createCornellWithArea :: Double -> IO (Scene RGB)
-createCornellWithArea area = do
-    let floor = translate 0 (0::Double) 0 `transform` createBox 50 2 50
-        left  = translate (-8:: Double) 0 0 `transform` createBox 2 50 50
-        right = translate (8::Double) 0 0 `transform` createBox 2 50 50
-        back  = translate 0 0 (-16::Double) `transform` createBox 50 50 2
-        top = translate 0 (16::Double) 0 `transform` createBox 50 2 50
-        sphere = translate (4:: Double) 3 (-9.5) `transform` createSphere 2
-        block = translate (-2::Double) 2 (-8.5) `transform` rotateY (pi/6::Double) `transform` createBox 4 6 4
-        side = sqrt area
-        light = translate 0 14.999999 (-10::Double) `transform` createAreaLight (Vector 0 1 0) side side ((16/area) *^ RGB 9 9 9)
+createScene :: IO (Scene RGB)
+createScene = do
+    wood <- readTextureMap "objects/wood.jpg" :: IO (TextureMap RGB)
+    let floor = Plane (Point 0 0 0) (Vector 0 1 0)
+        left  = translate (-15:: Double) 0 0 `transform` createBox 2 50 50
+        right = translate (15::Double) 0 0 `transform` createBox 2 50 50
+        back  = translate 0 0 (-15::Double) `transform` createBox 50 50 2
+        top   = translate 0 (15::Double) 0 `transform` createBox 50 2 50
+        front = translate 0 0 (15::Double) `transform` createBox 50 50 2
+        cilinder = translate 0 0.5 (0.5::Double) `transform` (DoubleSided $ createOpenCylinder (Vector 0 1 0) 3 2)
+        light = translate 8 6 (0::Double) `transform` createAreaLight (Vector (-3) (-2) 0) 1 1 (RGB 260 260 260)
 
-        world = createWorld [ withMaterial sphere Reflective
-                      , simpleObject floor
-                      , withMaterial left (Diffuse $ RGB 1 0 0)
-                      , withMaterial back (Diffuse $ RGB 1 1 1)
-                      , withMaterial right (Diffuse $ RGB 0 1 0)
-                      , simpleObject block
-                      , simpleObject top
+        world = createWorld [ withMaterial floor (DiffuseTexture wood (\(Vector x y z) -> (x/9, z/9)))
+                      , withMaterial cilinder (DiffuseReflective $ RGB 0.8 0.55 0.35)
                       , SceneLight light
+                      , withMaterial left (Diffuse $ RGB 0.1 0.05 0)
+                      , withMaterial right (Diffuse $ RGB 0.1 0.05 0)
+                      , withMaterial back (Diffuse $ RGB 0.1 0.05 0)
+                      , withMaterial top (Diffuse $ RGB 0.05 0.05 0.05)
+                      , withMaterial front (Diffuse $ RGB 0.1 0.05 0)
                       ]
                       [ Light light
+                      , Light $ AmbientLight $ RGB 0.03 0.03 0.03
                       ]
     return $ Scene (insertBoundingBoxes world) camera
 
 
-rayTracer = DirectionalMaxDepthPathTracer 3
+rayTracer = MaxDepthPathTracer 16
 
 renderFast :: (Spectrum s, Show s) => IO (Scene s) -> IO Image
 renderFast getScene = do
@@ -129,7 +130,7 @@ measureDepthConvergence = do
   hPutStrLn h $ intercalate "," ["depth", "mean radiance"]
   hClose h
   gens <- getWorkerGens
-  Scene !world _ <- createCornellWithArea 16
+  Scene !world _ <- reflectiveCornell
   forM_ [0..15] $ \depth -> do
     let refId = "d" ++ show depth
     !specImage <- computeSpectralImageAs B gens $ rayTrace cam (SpecificDepthPathTracer depth) world
@@ -142,14 +143,65 @@ measureDepthConvergence = do
     hClose h
 
 
+measureRouletteRMSE :: IO ()
+measureRouletteRMSE = do
+  let res = 150
+      refCount = 128
+      count = 64
+  h <- openFile "out/measurements_roulette/measurements.csv" WriteMode
+  hPutStrLn h $ intercalate "," ["alpha", "time", "rmse", "drmse"]
+  hClose h
+  gens <- getWorkerGens
+  Scene !world _ <- reflectiveCornell
+  let refCam =
+        createPerspectiveCamera
+          res
+          res
+          (Point 0 7 2)
+          (Vector 0 0 (-1))
+          (Vector 0 1 0)
+          (pi / 2)
+          (Random (refCount * refCount))
+      refId = "ref"
+  refImage <- computeSpectralImageAs B gens $ rayTrace refCam (RussianRoulettePathTracer 0.6) world
+  saveSpectralImage ("out/measurements_roulette/measurement-" ++ refId ++ ".spectral") refImage
+  writeImage ("out/measurements_roulette/" ++ refId ++ ".jpg") (toImage $ gammaCorrectImage refImage)
+  forM_ [0.40, 0.42..0.80] $ \alpha -> do
+    let spp = count * count
+        cam =
+          createPerspectiveCamera res res (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi / 2) (Random spp)
+        id = "alpha" ++ show (round $ 100*alpha)
+    start <- getCPUTime
+    !specImageWithError <- computeSpectralImageAs B gens $ rayTraceWithError cam (RussianRoulettePathTracer alpha) world refImage
+    evaluate (rnf specImageWithError)
+    end <- getCPUTime
+    let specImage = computeAs B $ A.map fst specImageWithError
+        errImage = computeAs B $ A.map snd specImageWithError
+        errSpecImage = A.map (toRGB . Gray) errImage
+    saveSpectralImage ("out/measurements_roulette/measurement-" ++ id ++ ".spectral") specImage
+    saveSpectralImage ("out/measurements_roulette/measurement-" ++ id ++ "err.spectral") errImage
+    writeImage ("out/measurements_roulette/" ++ id ++ ".jpg") (toImage $ gammaCorrectImage specImage)
+    writeImage ("out/measurements_roulette/" ++ id ++ "err.jpg") (toImage $ gammaCorrectImage errSpecImage)
+    let time = fromIntegral (end - start) * 1.0e-12 :: Double
+        se = A.zipWith (\c1 c2 -> let RGB r g b = c1 ^-^ c2 in r ** 2 + g ** 2 + b ** 2) refImage specImage
+        sqErrSe = A.zipWith (\a b -> 4 * a * b * b) se errImage
+        count = let Sz (r :. c) = size se in fromIntegral $ r*c
+        mse = (/count) $ A.sum se
+        errMse = (/count) $ sqrt $ A.sum sqErrSe
+        rmse = sqrt mse
+        errRmse = errMse / (2*rmse)
+        measurement = intercalate "," [show alpha, show time, show rmse, show errRmse]
+    h <- openFile "out/measurements_roulette/measurements.csv" AppendMode
+    hPutStrLn h measurement
+    hClose h
+
+
 main :: IO ()
 main = do
-  let res = 150
-      spp = 1024
-      cam = createPerspectiveCamera res res (Point 0 7 2) (Vector 0 0 (-1)) (Vector 0 1 0) (pi/2) (Random spp)
   gens <- getWorkerGens
-  Scene !world _ <- createCornellWithArea 16
-  !specImage <- computeSpectralImageAs B gens $ rayTrace cam (MaxDepthPathTracer 16) world
-  saveSpectralImage "out/measurements_depth/referentie.spectral" specImage
-  writeImage "out/measurements_depth/referentie.jpg" $ toImage $ gammaCorrectImage specImage
+  Scene world _ <- createScene
+  specImage <- computeSpectralImageAs B gens $ rayTrace camera rayTracer world
+  timeStamp <- formatTime defaultTimeLocale "%Y.%m.%d %H.%M.%S" <$> getZonedTime
+  saveSpectralImage ("out/measurements_caustic/ref" ++ timeStamp ++ ".spectral") specImage
+  writeImage ("out/measurements_caustic/ref" ++ timeStamp ++ ".jpg") (toImage $ gammaCorrectImage specImage)
   
